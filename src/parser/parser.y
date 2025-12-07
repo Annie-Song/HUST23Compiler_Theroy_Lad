@@ -1,20 +1,9 @@
 %{
-#define YYSTYPE YYSTYPE
-
-#define INT TOKEN_INT
-#define CHAR TOKEN_CHAR
-#define FLOAT TOKEN_FLOAT
-#define ID TOKEN_ID
-#define STRING TOKEN_STRING
-#define TYPE_INT TOKEN_TYPE_INT
-#define TYPE_FLOAT TOKEN_TYPE_FLOAT
-#define TYPE_CHAR TOKEN_TYPE_CHAR
-#define TYPE_VOID TOKEN_TYPE_VOID
-
 #include <stdio.h>
 #include <string.h>
 #include "/home/annie/compiler-lab/src/utils/def.h"
 #include "/home/annie/compiler-lab/src/ast/ast.h"
+#include "/home/annie/compiler-lab/src/semantic/semantic.h"
 
 extern int yylineno;
 extern char *yytext;
@@ -22,18 +11,20 @@ extern FILE *yyin;
 
 void yyerror(const char *s);
 int yylex(void);
+
+ASTNode *root = NULL;  // AST根节点
 %}
 
 %define parse.error verbose
 %locations
 %define api.value.type {YYSTYPE}
 
-/* 终结符（单词种类码）声明 */
-%token <type_int> INT CHAR
-%token <type_float> FLOAT
-%token <type_id> ID STRING
+/* 终结符（单词种类码）声明 - 使用新名字避免冲突 */
+%token <type_int> TOKEN_INT TOKEN_CHAR
+%token <type_float> TOKEN_FLOAT
+%token <type_id> TOKEN_ID TOKEN_STRING
 
-%token TYPE_INT TYPE_FLOAT TYPE_CHAR TYPE_VOID
+%token TOKEN_TYPE_INT TOKEN_TYPE_FLOAT TOKEN_TYPE_CHAR TOKEN_TYPE_VOID
 %token IF ELSE WHILE FOR BREAK CONTINUE RETURN CONST
 %token INC DEC
 %token PLUS MINUS STAR DIV MOD
@@ -64,8 +55,9 @@ int yylex(void);
 
 program
     : ext_def_list { 
-        display($1, 0);  // 显示抽象语法树
-        $$ = $1;
+        root = $1;  // 设置全局根节点
+        display(root, 0);  // 显示抽象语法树
+        $$ = root;
     }
     ;
 
@@ -84,7 +76,7 @@ ext_def
         ASTNode *t = mknode(2, EXT_VAR_DEF, yylineno, $1, $2);
         $$ = t;
     }
-     // 添加带初始化的全局变量定义
+    // 添加带初始化的全局变量定义
     | specifier var_dec ASSIGN exp SEMI {
         ASTNode *t = mknode(2, EXT_VAR_DEF, yylineno, $1, 
             mknode(2, INIT_DEC, yylineno, $2, $4));
@@ -100,25 +92,25 @@ ext_def
     ;
 
 specifier
-    : TYPE_INT {
+    : TOKEN_TYPE_INT {
         ASTNode *t = mknode(0, TYPE_NODE_INT, yylineno);
         strcpy(t->type_id, "int");
         t->type = 1;  // 类型编码
         $$ = t;
     }
-    | TYPE_FLOAT {
+    | TOKEN_TYPE_FLOAT {
         ASTNode *t = mknode(0, TYPE_NODE_FLOAT, yylineno);
         strcpy(t->type_id, "float");
         t->type = 2;
         $$ = t;
     }
-    | TYPE_CHAR {
+    | TOKEN_TYPE_CHAR {
         ASTNode *t = mknode(0, TYPE_NODE_CHAR, yylineno);
         strcpy(t->type_id, "char");
         t->type = 3;
         $$ = t;
     }
-    | TYPE_VOID {
+    | TOKEN_TYPE_VOID {
         ASTNode *t = mknode(0, TYPE_NODE_VOID, yylineno);
         strcpy(t->type_id, "void");
         t->type = 0;
@@ -138,12 +130,12 @@ ext_dec_list
     ;
 
 var_dec
-    : ID {
+    : TOKEN_ID {
         ASTNode *t = mknode(0, ID_NODE, yylineno);
         strcpy(t->type_id, $1);
         $$ = t;
     }
-    | var_dec LB INT RB {
+    | var_dec LB TOKEN_INT RB {
         // 数组声明：处理多维数组
         ASTNode *t = mknode(2, ARRAY_DEC, yylineno, $1, mknode(0, INT_NODE, yylineno));
         t->ptr[1]->type_int = $3;
@@ -152,13 +144,13 @@ var_dec
     ;
 
 func_dec
-    : ID LP var_list RP {
+    : TOKEN_ID LP var_list RP {
         ASTNode *t = mknode(2, FUNC_DEC, yylineno, 
                            mknode(0, ID_NODE, yylineno), $3);
         strcpy(t->ptr[0]->type_id, $1);
         $$ = t;
     }
-    | ID LP RP {
+    | TOKEN_ID LP RP {
         ASTNode *t = mknode(1, FUNC_DEC, yylineno, 
                            mknode(0, ID_NODE, yylineno));
         strcpy(t->ptr[0]->type_id, $1);
@@ -189,7 +181,7 @@ comp_st
         ASTNode *t = mknode(2, COMP_ST, yylineno, $2, $3);
         $$ = t;
     }
-     | LC stmt_list RC {  // 添加这个规则：没有变量声明的复合语句
+    | LC stmt_list RC {  // 添加这个规则：没有变量声明的复合语句
         ASTNode *t = mknode(1, COMP_ST, yylineno, $2);
         $$ = t;
     }
@@ -210,12 +202,17 @@ def
         ASTNode *t = mknode(2, DEF, yylineno, $1, $2);
         $$ = t;
     }
+    ;
+
 local_def
-    : specifier dec_list | specifier var_dec ASSIGN exp {
+    : specifier dec_list {
         ASTNode *t = mknode(2, DEF, yylineno, $1, $2);
         $$ = t;
     }
-    ;
+    | specifier var_dec ASSIGN exp {
+        ASTNode *t = mknode(2, DEF, yylineno, $1, mknode(2, INIT_DEC, yylineno, $2, $4));
+        $$ = t;
+    }
     ;
 
 dec_list
@@ -254,12 +251,11 @@ stmt
     : local_def SEMI {  // 例如：int a = 0, b = 1;
         $$ = $1;
     }
-     // 添加变量声明语句
+    // 添加变量声明语句
     | def {
         ASTNode *t = mknode(1, EXP_STMT, yylineno, $1);  // 将def包装为语句
         $$ = t;
     }
-    //
     | exp SEMI {
         ASTNode *t = mknode(1, EXP_STMT, yylineno, $1);
         $$ = t;
@@ -287,8 +283,7 @@ stmt
         ASTNode *t = mknode(2, WHILE_STMT, yylineno, $3, $5);
         $$ = t;
     }
-
-///FOR 开始
+    // FOR 开始
     | FOR LP exp SEMI exp SEMI exp RP stmt {  // for (exp; exp; exp) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, $3, $5, $7, $9);
         $$ = t;
@@ -310,8 +305,7 @@ stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, $3, $5, $7, $9);
         $$ = t;
     }
-//FOR 结束
-
+    // FOR 结束
     | BREAK SEMI {
         ASTNode *t = mknode(0, BREAK_STMT, yylineno);
         $$ = t;
@@ -459,13 +453,13 @@ exp
     | LP exp RP {
         $$ = $2;
     }
-    | ID LP args RP {
+    | TOKEN_ID LP args RP {
         ASTNode *t = mknode(2, FUNC_CALL, yylineno, 
                            mknode(0, ID_NODE, yylineno), $3);
         strcpy(t->ptr[0]->type_id, $1);
         $$ = t;
     }
-    | ID LP RP {
+    | TOKEN_ID LP RP {
         ASTNode *t = mknode(1, FUNC_CALL, yylineno, 
                            mknode(0, ID_NODE, yylineno));
         strcpy(t->ptr[0]->type_id, $1);
@@ -475,22 +469,22 @@ exp
         ASTNode *t = mknode(2, ARRAY_ACCESS, yylineno, $1, $3);
         $$ = t;
     }
-    | ID {
+    | TOKEN_ID {
         ASTNode *t = mknode(0, ID_NODE, yylineno);
         strcpy(t->type_id, $1);
         $$ = t;
     }
-    | INT {
+    | TOKEN_INT {
         ASTNode *t = mknode(0, INT_NODE, yylineno);
         t->type_int = $1;
         $$ = t;
     }
-    | FLOAT {
+    | TOKEN_FLOAT {
         ASTNode *t = mknode(0, FLOAT_NODE, yylineno);
         t->type_float = $1;
         $$ = t;
     }
-    | CHAR {
+    | TOKEN_CHAR {
         ASTNode *t = mknode(0, CHAR_NODE, yylineno);
         t->type_int = $1;  // 字符值存储在type_int中
         $$ = t;

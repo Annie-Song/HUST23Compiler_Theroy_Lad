@@ -12,10 +12,10 @@ enum NodeKind {
     FUNC_DEC,
     
     // 类型节点（加后缀_NODE）
-    TYPE_NODE_INT,      // 原 TYPE_INT
-    TYPE_NODE_FLOAT,    // 原 TYPE_FLOAT  
-    TYPE_NODE_CHAR,     // 原 TYPE_CHAR
-    TYPE_NODE_VOID,     // 原 TYPE_VOID
+    TYPE_NODE_INT,      // 原 DT_INT
+    TYPE_NODE_FLOAT,    // 原 DT_FLOAT  
+    TYPE_NODE_CHAR,     // 原 DT_CHAR
+    TYPE_NODE_VOID,     // 原 DT_VOID
     
     // 声明
     EXT_DEC_LIST,

@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_HOME_ANNIE_COMPILER_LAB_BUILD_PARSER_TAB_H_INCLUDED
-# define YY_YY_HOME_ANNIE_COMPILER_LAB_BUILD_PARSER_TAB_H_INCLUDED
+#ifndef YY_YY_PARSER_TAB_H_INCLUDED
+# define YY_YY_PARSER_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -54,15 +54,15 @@ extern int yydebug;
     YYEOF = 0,                     /* "end of file"  */
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
-    INT = 258,                     /* INT  */
-    CHAR = 259,                    /* CHAR  */
-    FLOAT = 260,                   /* FLOAT  */
-    ID = 261,                      /* ID  */
-    STRING = 262,                  /* STRING  */
-    TYPE_INT = 263,                /* TYPE_INT  */
-    TYPE_FLOAT = 264,              /* TYPE_FLOAT  */
-    TYPE_CHAR = 265,               /* TYPE_CHAR  */
-    TYPE_VOID = 266,               /* TYPE_VOID  */
+    TOKEN_INT = 258,               /* TOKEN_INT  */
+    TOKEN_CHAR = 259,              /* TOKEN_CHAR  */
+    TOKEN_FLOAT = 260,             /* TOKEN_FLOAT  */
+    TOKEN_ID = 261,                /* TOKEN_ID  */
+    TOKEN_STRING = 262,            /* TOKEN_STRING  */
+    TOKEN_TYPE_INT = 263,          /* TOKEN_TYPE_INT  */
+    TOKEN_TYPE_FLOAT = 264,        /* TOKEN_TYPE_FLOAT  */
+    TOKEN_TYPE_CHAR = 265,         /* TOKEN_TYPE_CHAR  */
+    TOKEN_TYPE_VOID = 266,         /* TOKEN_TYPE_VOID  */
     IF = 267,                      /* IF  */
     ELSE = 268,                    /* ELSE  */
     WHILE = 269,                   /* WHILE  */
@@ -137,4 +137,4 @@ extern YYLTYPE yylloc;
 int yyparse (void);
 
 
-#endif /* !YY_YY_HOME_ANNIE_COMPILER_LAB_BUILD_PARSER_TAB_H_INCLUDED  */
+#endif /* !YY_YY_PARSER_TAB_H_INCLUDED  */

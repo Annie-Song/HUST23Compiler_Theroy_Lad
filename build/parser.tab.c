@@ -69,22 +69,11 @@
 /* First part of user prologue.  */
 #line 1 "/home/annie/compiler-lab/src/parser/parser.y"
 
-#define YYSTYPE YYSTYPE
-
-#define INT TOKEN_INT
-#define CHAR TOKEN_CHAR
-#define FLOAT TOKEN_FLOAT
-#define ID TOKEN_ID
-#define STRING TOKEN_STRING
-#define TYPE_INT TOKEN_TYPE_INT
-#define TYPE_FLOAT TOKEN_TYPE_FLOAT
-#define TYPE_CHAR TOKEN_TYPE_CHAR
-#define TYPE_VOID TOKEN_TYPE_VOID
-
 #include <stdio.h>
 #include <string.h>
 #include "/home/annie/compiler-lab/src/utils/def.h"
 #include "/home/annie/compiler-lab/src/ast/ast.h"
+#include "/home/annie/compiler-lab/src/semantic/semantic.h"
 
 extern int yylineno;
 extern char *yytext;
@@ -93,7 +82,9 @@ extern FILE *yyin;
 void yyerror(const char *s);
 int yylex(void);
 
-#line 97 "/home/annie/compiler-lab/build/parser.tab.c"
+ASTNode *root = NULL;  // AST根节点
+
+#line 88 "parser.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -124,15 +115,15 @@ enum yysymbol_kind_t
   YYSYMBOL_YYEOF = 0,                      /* "end of file"  */
   YYSYMBOL_YYerror = 1,                    /* error  */
   YYSYMBOL_YYUNDEF = 2,                    /* "invalid token"  */
-  YYSYMBOL_INT = 3,                        /* INT  */
-  YYSYMBOL_CHAR = 4,                       /* CHAR  */
-  YYSYMBOL_FLOAT = 5,                      /* FLOAT  */
-  YYSYMBOL_ID = 6,                         /* ID  */
-  YYSYMBOL_STRING = 7,                     /* STRING  */
-  YYSYMBOL_TYPE_INT = 8,                   /* TYPE_INT  */
-  YYSYMBOL_TYPE_FLOAT = 9,                 /* TYPE_FLOAT  */
-  YYSYMBOL_TYPE_CHAR = 10,                 /* TYPE_CHAR  */
-  YYSYMBOL_TYPE_VOID = 11,                 /* TYPE_VOID  */
+  YYSYMBOL_TOKEN_INT = 3,                  /* TOKEN_INT  */
+  YYSYMBOL_TOKEN_CHAR = 4,                 /* TOKEN_CHAR  */
+  YYSYMBOL_TOKEN_FLOAT = 5,                /* TOKEN_FLOAT  */
+  YYSYMBOL_TOKEN_ID = 6,                   /* TOKEN_ID  */
+  YYSYMBOL_TOKEN_STRING = 7,               /* TOKEN_STRING  */
+  YYSYMBOL_TOKEN_TYPE_INT = 8,             /* TOKEN_TYPE_INT  */
+  YYSYMBOL_TOKEN_TYPE_FLOAT = 9,           /* TOKEN_TYPE_FLOAT  */
+  YYSYMBOL_TOKEN_TYPE_CHAR = 10,           /* TOKEN_TYPE_CHAR  */
+  YYSYMBOL_TOKEN_TYPE_VOID = 11,           /* TOKEN_TYPE_VOID  */
   YYSYMBOL_IF = 12,                        /* IF  */
   YYSYMBOL_ELSE = 13,                      /* ELSE  */
   YYSYMBOL_WHILE = 14,                     /* WHILE  */
@@ -588,15 +579,15 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
-       0,    66,    66,    73,    77,    83,    88,    93,    97,   103,
-     109,   115,   121,   130,   134,   141,   146,   155,   161,   170,
-     174,   181,   188,   192,   199,   203,   209,   214,   214,   222,
-     226,   233,   236,   243,   247,   254,   258,   263,   267,   270,
-     274,   278,   282,   286,   292,   297,   301,   305,   309,   315,
-     319,   323,   329,   334,   339,   344,   349,   354,   359,   364,
-     369,   374,   379,   384,   389,   394,   399,   404,   409,   414,
-     419,   424,   429,   434,   439,   444,   449,   454,   459,   462,
-     468,   474,   478,   483,   488,   493,   501,   505
+       0,    57,    57,    65,    69,    75,    80,    85,    89,    95,
+     101,   107,   113,   122,   126,   133,   138,   147,   153,   162,
+     166,   173,   180,   184,   191,   195,   201,   208,   212,   219,
+     223,   230,   233,   240,   244,   251,   255,   259,   263,   266,
+     270,   274,   278,   282,   287,   292,   296,   300,   304,   309,
+     313,   317,   323,   328,   333,   338,   343,   348,   353,   358,
+     363,   368,   373,   378,   383,   388,   393,   398,   403,   408,
+     413,   418,   423,   428,   433,   438,   443,   448,   453,   456,
+     462,   468,   472,   477,   482,   487,   495,   499
 };
 #endif
 
@@ -612,17 +603,18 @@ static const char *yysymbol_name (yysymbol_kind_t yysymbol) YY_ATTRIBUTE_UNUSED;
    First, the terminals, then, starting at YYNTOKENS, nonterminals.  */
 static const char *const yytname[] =
 {
-  "\"end of file\"", "error", "\"invalid token\"", "INT", "CHAR", "FLOAT",
-  "ID", "STRING", "TYPE_INT", "TYPE_FLOAT", "TYPE_CHAR", "TYPE_VOID", "IF",
-  "ELSE", "WHILE", "FOR", "BREAK", "CONTINUE", "RETURN", "CONST", "INC",
-  "DEC", "PLUS", "MINUS", "STAR", "DIV", "MOD", "ASSIGN", "ADD_ASSIGN",
-  "SUB_ASSIGN", "MUL_ASSIGN", "DIV_ASSIGN", "MOD_ASSIGN", "EQ", "NE", "GT",
-  "GE", "LT", "LE", "AND", "OR", "NOT", "LP", "RP", "LC", "RC", "LB", "RB",
-  "COMMA", "SEMI", "DOT", "UMINUS", "UPLUS", "LOWER_THAN_ELSE", "$accept",
-  "program", "ext_def_list", "ext_def", "specifier", "ext_dec_list",
-  "var_dec", "func_dec", "var_list", "param_dec", "comp_st", "def_list",
-  "def", "local_def", "dec_list", "dec", "stmt_list", "stmt", "exp",
-  "args", YY_NULLPTR
+  "\"end of file\"", "error", "\"invalid token\"", "TOKEN_INT",
+  "TOKEN_CHAR", "TOKEN_FLOAT", "TOKEN_ID", "TOKEN_STRING",
+  "TOKEN_TYPE_INT", "TOKEN_TYPE_FLOAT", "TOKEN_TYPE_CHAR",
+  "TOKEN_TYPE_VOID", "IF", "ELSE", "WHILE", "FOR", "BREAK", "CONTINUE",
+  "RETURN", "CONST", "INC", "DEC", "PLUS", "MINUS", "STAR", "DIV", "MOD",
+  "ASSIGN", "ADD_ASSIGN", "SUB_ASSIGN", "MUL_ASSIGN", "DIV_ASSIGN",
+  "MOD_ASSIGN", "EQ", "NE", "GT", "GE", "LT", "LE", "AND", "OR", "NOT",
+  "LP", "RP", "LC", "RC", "LB", "RB", "COMMA", "SEMI", "DOT", "UMINUS",
+  "UPLUS", "LOWER_THAN_ELSE", "$accept", "program", "ext_def_list",
+  "ext_def", "specifier", "ext_dec_list", "var_dec", "func_dec",
+  "var_list", "param_dec", "comp_st", "def_list", "def", "local_def",
+  "dec_list", "dec", "stmt_list", "stmt", "exp", "args", YY_NULLPTR
 };
 
 static const char *
@@ -1810,813 +1802,823 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* program: ext_def_list  */
-#line 66 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 57 "/home/annie/compiler-lab/src/parser/parser.y"
                    { 
-        display((yyvsp[0].ptr), 0);  // 显示抽象语法树
-        (yyval.ptr) = (yyvsp[0].ptr);
+        root = (yyvsp[0].ptr);  // 设置全局根节点
+        display(root, 0);  // 显示抽象语法树
+        (yyval.ptr) = root;
     }
-#line 1819 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1812 "parser.tab.c"
     break;
 
   case 3: /* ext_def_list: ext_def ext_def_list  */
-#line 73 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 65 "/home/annie/compiler-lab/src/parser/parser.y"
                            {
         ASTNode *t = mknode(2, EXT_DEF_LIST, yylineno, (yyvsp[-1].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1828 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1821 "parser.tab.c"
     break;
 
   case 4: /* ext_def_list: %empty  */
-#line 77 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 69 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         (yyval.ptr) = NULL;
     }
-#line 1836 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1829 "parser.tab.c"
     break;
 
   case 5: /* ext_def: specifier ext_dec_list SEMI  */
-#line 83 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 75 "/home/annie/compiler-lab/src/parser/parser.y"
                                   {
         ASTNode *t = mknode(2, EXT_VAR_DEF, yylineno, (yyvsp[-2].ptr), (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 1845 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1838 "parser.tab.c"
     break;
 
   case 6: /* ext_def: specifier var_dec ASSIGN exp SEMI  */
-#line 88 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 80 "/home/annie/compiler-lab/src/parser/parser.y"
                                         {
         ASTNode *t = mknode(2, EXT_VAR_DEF, yylineno, (yyvsp[-4].ptr), 
             mknode(2, INIT_DEC, yylineno, (yyvsp[-3].ptr), (yyvsp[-1].ptr)));
         (yyval.ptr) = t;
     }
-#line 1855 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1848 "parser.tab.c"
     break;
 
   case 7: /* ext_def: specifier func_dec comp_st  */
-#line 93 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 85 "/home/annie/compiler-lab/src/parser/parser.y"
                                  {
         ASTNode *t = mknode(3, FUNC_DEF, yylineno, (yyvsp[-2].ptr), (yyvsp[-1].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1864 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1857 "parser.tab.c"
     break;
 
   case 8: /* ext_def: error SEMI  */
-#line 97 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 89 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         (yyval.ptr) = NULL;
     }
-#line 1872 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1865 "parser.tab.c"
     break;
 
-  case 9: /* specifier: TYPE_INT  */
-#line 103 "/home/annie/compiler-lab/src/parser/parser.y"
-               {
+  case 9: /* specifier: TOKEN_TYPE_INT  */
+#line 95 "/home/annie/compiler-lab/src/parser/parser.y"
+                     {
         ASTNode *t = mknode(0, TYPE_NODE_INT, yylineno);
         strcpy(t->type_id, "int");
         t->type = 1;  // 类型编码
         (yyval.ptr) = t;
     }
-#line 1883 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1876 "parser.tab.c"
     break;
 
-  case 10: /* specifier: TYPE_FLOAT  */
-#line 109 "/home/annie/compiler-lab/src/parser/parser.y"
-                 {
+  case 10: /* specifier: TOKEN_TYPE_FLOAT  */
+#line 101 "/home/annie/compiler-lab/src/parser/parser.y"
+                       {
         ASTNode *t = mknode(0, TYPE_NODE_FLOAT, yylineno);
         strcpy(t->type_id, "float");
         t->type = 2;
         (yyval.ptr) = t;
     }
-#line 1894 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1887 "parser.tab.c"
     break;
 
-  case 11: /* specifier: TYPE_CHAR  */
-#line 115 "/home/annie/compiler-lab/src/parser/parser.y"
-                {
+  case 11: /* specifier: TOKEN_TYPE_CHAR  */
+#line 107 "/home/annie/compiler-lab/src/parser/parser.y"
+                      {
         ASTNode *t = mknode(0, TYPE_NODE_CHAR, yylineno);
         strcpy(t->type_id, "char");
         t->type = 3;
         (yyval.ptr) = t;
     }
-#line 1905 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1898 "parser.tab.c"
     break;
 
-  case 12: /* specifier: TYPE_VOID  */
-#line 121 "/home/annie/compiler-lab/src/parser/parser.y"
-                {
+  case 12: /* specifier: TOKEN_TYPE_VOID  */
+#line 113 "/home/annie/compiler-lab/src/parser/parser.y"
+                      {
         ASTNode *t = mknode(0, TYPE_NODE_VOID, yylineno);
         strcpy(t->type_id, "void");
         t->type = 0;
         (yyval.ptr) = t;
     }
-#line 1916 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1909 "parser.tab.c"
     break;
 
   case 13: /* ext_dec_list: var_dec  */
-#line 130 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 122 "/home/annie/compiler-lab/src/parser/parser.y"
               {
         ASTNode *t = mknode(1, EXT_DEC_LIST, yylineno, (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1925 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1918 "parser.tab.c"
     break;
 
   case 14: /* ext_dec_list: var_dec COMMA ext_dec_list  */
-#line 134 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 126 "/home/annie/compiler-lab/src/parser/parser.y"
                                  {
         ASTNode *t = mknode(2, EXT_DEC_LIST, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1934 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1927 "parser.tab.c"
     break;
 
-  case 15: /* var_dec: ID  */
-#line 141 "/home/annie/compiler-lab/src/parser/parser.y"
-         {
+  case 15: /* var_dec: TOKEN_ID  */
+#line 133 "/home/annie/compiler-lab/src/parser/parser.y"
+               {
         ASTNode *t = mknode(0, ID_NODE, yylineno);
         strcpy(t->type_id, (yyvsp[0].type_id));
         (yyval.ptr) = t;
     }
-#line 1944 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1937 "parser.tab.c"
     break;
 
-  case 16: /* var_dec: var_dec LB INT RB  */
-#line 146 "/home/annie/compiler-lab/src/parser/parser.y"
-                        {
+  case 16: /* var_dec: var_dec LB TOKEN_INT RB  */
+#line 138 "/home/annie/compiler-lab/src/parser/parser.y"
+                              {
         // 数组声明：处理多维数组
         ASTNode *t = mknode(2, ARRAY_DEC, yylineno, (yyvsp[-3].ptr), mknode(0, INT_NODE, yylineno));
         t->ptr[1]->type_int = (yyvsp[-1].type_int);
         (yyval.ptr) = t;
     }
-#line 1955 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1948 "parser.tab.c"
     break;
 
-  case 17: /* func_dec: ID LP var_list RP  */
-#line 155 "/home/annie/compiler-lab/src/parser/parser.y"
-                        {
+  case 17: /* func_dec: TOKEN_ID LP var_list RP  */
+#line 147 "/home/annie/compiler-lab/src/parser/parser.y"
+                              {
         ASTNode *t = mknode(2, FUNC_DEC, yylineno, 
                            mknode(0, ID_NODE, yylineno), (yyvsp[-1].ptr));
         strcpy(t->ptr[0]->type_id, (yyvsp[-3].type_id));
         (yyval.ptr) = t;
     }
-#line 1966 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1959 "parser.tab.c"
     break;
 
-  case 18: /* func_dec: ID LP RP  */
-#line 161 "/home/annie/compiler-lab/src/parser/parser.y"
-               {
+  case 18: /* func_dec: TOKEN_ID LP RP  */
+#line 153 "/home/annie/compiler-lab/src/parser/parser.y"
+                     {
         ASTNode *t = mknode(1, FUNC_DEC, yylineno, 
                            mknode(0, ID_NODE, yylineno));
         strcpy(t->ptr[0]->type_id, (yyvsp[-2].type_id));
         (yyval.ptr) = t;
     }
-#line 1977 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1970 "parser.tab.c"
     break;
 
   case 19: /* var_list: param_dec COMMA var_list  */
-#line 170 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 162 "/home/annie/compiler-lab/src/parser/parser.y"
                                {
         ASTNode *t = mknode(2, VAR_LIST, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1986 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1979 "parser.tab.c"
     break;
 
   case 20: /* var_list: param_dec  */
-#line 174 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 166 "/home/annie/compiler-lab/src/parser/parser.y"
                 {
         ASTNode *t = mknode(1, VAR_LIST, yylineno, (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 1995 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1988 "parser.tab.c"
     break;
 
   case 21: /* param_dec: specifier var_dec  */
-#line 181 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 173 "/home/annie/compiler-lab/src/parser/parser.y"
                         {
         ASTNode *t = mknode(2, PARAM_DEC, yylineno, (yyvsp[-1].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2004 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 1997 "parser.tab.c"
     break;
 
   case 22: /* comp_st: LC def_list stmt_list RC  */
-#line 188 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 180 "/home/annie/compiler-lab/src/parser/parser.y"
                                {
         ASTNode *t = mknode(2, COMP_ST, yylineno, (yyvsp[-2].ptr), (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2013 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2006 "parser.tab.c"
     break;
 
   case 23: /* comp_st: LC stmt_list RC  */
-#line 192 "/home/annie/compiler-lab/src/parser/parser.y"
-                       {  // 添加这个规则：没有变量声明的复合语句
+#line 184 "/home/annie/compiler-lab/src/parser/parser.y"
+                      {  // 添加这个规则：没有变量声明的复合语句
         ASTNode *t = mknode(1, COMP_ST, yylineno, (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2022 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2015 "parser.tab.c"
     break;
 
   case 24: /* def_list: def def_list  */
-#line 199 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 191 "/home/annie/compiler-lab/src/parser/parser.y"
                    {
         ASTNode *t = mknode(2, DEF_LIST, yylineno, (yyvsp[-1].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2031 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2024 "parser.tab.c"
     break;
 
   case 25: /* def_list: %empty  */
-#line 203 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 195 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         (yyval.ptr) = NULL;
     }
-#line 2039 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2032 "parser.tab.c"
     break;
 
   case 26: /* def: specifier dec_list SEMI  */
-#line 209 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 201 "/home/annie/compiler-lab/src/parser/parser.y"
                               {
         ASTNode *t = mknode(2, DEF, yylineno, (yyvsp[-2].ptr), (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2048 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2041 "parser.tab.c"
+    break;
+
+  case 27: /* local_def: specifier dec_list  */
+#line 208 "/home/annie/compiler-lab/src/parser/parser.y"
+                         {
+        ASTNode *t = mknode(2, DEF, yylineno, (yyvsp[-1].ptr), (yyvsp[0].ptr));
+        (yyval.ptr) = t;
+    }
+#line 2050 "parser.tab.c"
     break;
 
   case 28: /* local_def: specifier var_dec ASSIGN exp  */
-#line 214 "/home/annie/compiler-lab/src/parser/parser.y"
-                                                        {
-        ASTNode *t = mknode(2, DEF, yylineno, (yyvsp[-3].ptr), (yyvsp[-2].ptr));
+#line 212 "/home/annie/compiler-lab/src/parser/parser.y"
+                                   {
+        ASTNode *t = mknode(2, DEF, yylineno, (yyvsp[-3].ptr), mknode(2, INIT_DEC, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr)));
         (yyval.ptr) = t;
     }
-#line 2057 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2059 "parser.tab.c"
     break;
 
   case 29: /* dec_list: dec  */
-#line 222 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 219 "/home/annie/compiler-lab/src/parser/parser.y"
           {
         ASTNode *t = mknode(1, DEC_LIST, yylineno, (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2066 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2068 "parser.tab.c"
     break;
 
   case 30: /* dec_list: dec COMMA dec_list  */
-#line 226 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 223 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, DEC_LIST, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2075 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2077 "parser.tab.c"
     break;
 
   case 31: /* dec: var_dec  */
-#line 233 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 230 "/home/annie/compiler-lab/src/parser/parser.y"
               {
         (yyval.ptr) = (yyvsp[0].ptr);
     }
-#line 2083 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2085 "parser.tab.c"
     break;
 
   case 32: /* dec: var_dec ASSIGN exp  */
-#line 236 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 233 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, INIT_DEC, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2092 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2094 "parser.tab.c"
     break;
 
   case 33: /* stmt_list: stmt stmt_list  */
-#line 243 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 240 "/home/annie/compiler-lab/src/parser/parser.y"
                      {
         ASTNode *t = mknode(2, STMT_LIST, yylineno, (yyvsp[-1].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2101 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2103 "parser.tab.c"
     break;
 
   case 34: /* stmt_list: %empty  */
-#line 247 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 244 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         (yyval.ptr) = NULL;
     }
-#line 2109 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2111 "parser.tab.c"
     break;
 
   case 35: /* stmt: local_def SEMI  */
-#line 254 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 251 "/home/annie/compiler-lab/src/parser/parser.y"
                      {  // 例如：int a = 0, b = 1;
         (yyval.ptr) = (yyvsp[-1].ptr);
     }
-#line 2117 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2119 "parser.tab.c"
     break;
 
   case 36: /* stmt: def  */
-#line 258 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 255 "/home/annie/compiler-lab/src/parser/parser.y"
           {
         ASTNode *t = mknode(1, EXP_STMT, yylineno, (yyvsp[0].ptr));  // 将def包装为语句
         (yyval.ptr) = t;
     }
-#line 2126 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2128 "parser.tab.c"
     break;
 
   case 37: /* stmt: exp SEMI  */
-#line 263 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 259 "/home/annie/compiler-lab/src/parser/parser.y"
                {
         ASTNode *t = mknode(1, EXP_STMT, yylineno, (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2135 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2137 "parser.tab.c"
     break;
 
   case 38: /* stmt: comp_st  */
-#line 267 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 263 "/home/annie/compiler-lab/src/parser/parser.y"
               {
         (yyval.ptr) = (yyvsp[0].ptr);
     }
-#line 2143 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2145 "parser.tab.c"
     break;
 
   case 39: /* stmt: RETURN exp SEMI  */
-#line 270 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 266 "/home/annie/compiler-lab/src/parser/parser.y"
                       {
         ASTNode *t = mknode(1, RETURN_STMT, yylineno, (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2152 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2154 "parser.tab.c"
     break;
 
   case 40: /* stmt: RETURN SEMI  */
-#line 274 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 270 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         ASTNode *t = mknode(0, RETURN_STMT, yylineno);
         (yyval.ptr) = t;
     }
-#line 2161 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2163 "parser.tab.c"
     break;
 
   case 41: /* stmt: IF LP exp RP stmt  */
-#line 278 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 274 "/home/annie/compiler-lab/src/parser/parser.y"
                                               {
         ASTNode *t = mknode(2, IF_STMT, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2170 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2172 "parser.tab.c"
     break;
 
   case 42: /* stmt: IF LP exp RP stmt ELSE stmt  */
-#line 282 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 278 "/home/annie/compiler-lab/src/parser/parser.y"
                                   {
         ASTNode *t = mknode(3, IF_ELSE_STMT, yylineno, (yyvsp[-4].ptr), (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2179 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2181 "parser.tab.c"
     break;
 
   case 43: /* stmt: WHILE LP exp RP stmt  */
-#line 286 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 282 "/home/annie/compiler-lab/src/parser/parser.y"
                            {
         ASTNode *t = mknode(2, WHILE_STMT, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2188 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2190 "parser.tab.c"
     break;
 
   case 44: /* stmt: FOR LP exp SEMI exp SEMI exp RP stmt  */
-#line 292 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 287 "/home/annie/compiler-lab/src/parser/parser.y"
                                            {  // for (exp; exp; exp) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, (yyvsp[-6].ptr), (yyvsp[-4].ptr), (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2197 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2199 "parser.tab.c"
     break;
 
   case 45: /* stmt: FOR LP SEMI exp SEMI exp RP stmt  */
-#line 297 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 292 "/home/annie/compiler-lab/src/parser/parser.y"
                                        {  // for (; exp; exp) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, NULL, (yyvsp[-4].ptr), (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2206 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2208 "parser.tab.c"
     break;
 
   case 46: /* stmt: FOR LP exp SEMI SEMI exp RP stmt  */
-#line 301 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 296 "/home/annie/compiler-lab/src/parser/parser.y"
                                        {  // for (exp; ; exp) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, (yyvsp[-5].ptr), NULL, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2215 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2217 "parser.tab.c"
     break;
 
   case 47: /* stmt: FOR LP exp SEMI exp SEMI RP stmt  */
-#line 305 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 300 "/home/annie/compiler-lab/src/parser/parser.y"
                                        {  // for (exp; exp; ) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, (yyvsp[-5].ptr), (yyvsp[-3].ptr), NULL, (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2224 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2226 "parser.tab.c"
     break;
 
   case 48: /* stmt: FOR LP local_def SEMI exp SEMI exp RP stmt  */
-#line 309 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 304 "/home/annie/compiler-lab/src/parser/parser.y"
                                                  {  // for (int i=0; i<n; i++) stmt
         ASTNode *t = mknode(4, FOR_STMT, yylineno, (yyvsp[-6].ptr), (yyvsp[-4].ptr), (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2233 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2235 "parser.tab.c"
     break;
 
   case 49: /* stmt: BREAK SEMI  */
-#line 315 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 309 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(0, BREAK_STMT, yylineno);
         (yyval.ptr) = t;
     }
-#line 2242 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2244 "parser.tab.c"
     break;
 
   case 50: /* stmt: CONTINUE SEMI  */
-#line 319 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 313 "/home/annie/compiler-lab/src/parser/parser.y"
                     {
         ASTNode *t = mknode(0, CONTINUE_STMT, yylineno);
         (yyval.ptr) = t;
     }
-#line 2251 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2253 "parser.tab.c"
     break;
 
   case 51: /* stmt: error SEMI  */
-#line 323 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 317 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         (yyval.ptr) = NULL;
     }
-#line 2259 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2261 "parser.tab.c"
     break;
 
   case 52: /* exp: exp ASSIGN exp  */
-#line 329 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 323 "/home/annie/compiler-lab/src/parser/parser.y"
                      {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "=");
         (yyval.ptr) = t;
     }
-#line 2269 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2271 "parser.tab.c"
     break;
 
   case 53: /* exp: exp ADD_ASSIGN exp  */
-#line 334 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 328 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "+=");
         (yyval.ptr) = t;
     }
-#line 2279 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2281 "parser.tab.c"
     break;
 
   case 54: /* exp: exp SUB_ASSIGN exp  */
-#line 339 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 333 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "-=");
         (yyval.ptr) = t;
     }
-#line 2289 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2291 "parser.tab.c"
     break;
 
   case 55: /* exp: exp MUL_ASSIGN exp  */
-#line 344 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 338 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "*=");
         (yyval.ptr) = t;
     }
-#line 2299 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2301 "parser.tab.c"
     break;
 
   case 56: /* exp: exp DIV_ASSIGN exp  */
-#line 349 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 343 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "/=");
         (yyval.ptr) = t;
     }
-#line 2309 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2311 "parser.tab.c"
     break;
 
   case 57: /* exp: exp MOD_ASSIGN exp  */
-#line 354 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 348 "/home/annie/compiler-lab/src/parser/parser.y"
                          {
         ASTNode *t = mknode(2, ASSIGN_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "%=");
         (yyval.ptr) = t;
     }
-#line 2319 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2321 "parser.tab.c"
     break;
 
   case 58: /* exp: exp OR exp  */
-#line 359 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 353 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "||");
         (yyval.ptr) = t;
     }
-#line 2329 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2331 "parser.tab.c"
     break;
 
   case 59: /* exp: exp AND exp  */
-#line 364 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 358 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "&&");
         (yyval.ptr) = t;
     }
-#line 2339 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2341 "parser.tab.c"
     break;
 
   case 60: /* exp: exp EQ exp  */
-#line 369 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 363 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "==");
         (yyval.ptr) = t;
     }
-#line 2349 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2351 "parser.tab.c"
     break;
 
   case 61: /* exp: exp NE exp  */
-#line 374 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 368 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "!=");
         (yyval.ptr) = t;
     }
-#line 2359 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2361 "parser.tab.c"
     break;
 
   case 62: /* exp: exp LT exp  */
-#line 379 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 373 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "<");
         (yyval.ptr) = t;
     }
-#line 2369 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2371 "parser.tab.c"
     break;
 
   case 63: /* exp: exp GT exp  */
-#line 384 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 378 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, ">");
         (yyval.ptr) = t;
     }
-#line 2379 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2381 "parser.tab.c"
     break;
 
   case 64: /* exp: exp LE exp  */
-#line 389 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 383 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "<=");
         (yyval.ptr) = t;
     }
-#line 2389 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2391 "parser.tab.c"
     break;
 
   case 65: /* exp: exp GE exp  */
-#line 394 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 388 "/home/annie/compiler-lab/src/parser/parser.y"
                  {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, ">=");
         (yyval.ptr) = t;
     }
-#line 2399 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2401 "parser.tab.c"
     break;
 
   case 66: /* exp: exp PLUS exp  */
-#line 399 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 393 "/home/annie/compiler-lab/src/parser/parser.y"
                    {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "+");
         (yyval.ptr) = t;
     }
-#line 2409 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2411 "parser.tab.c"
     break;
 
   case 67: /* exp: exp MINUS exp  */
-#line 404 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 398 "/home/annie/compiler-lab/src/parser/parser.y"
                     {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "-");
         (yyval.ptr) = t;
     }
-#line 2419 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2421 "parser.tab.c"
     break;
 
   case 68: /* exp: exp STAR exp  */
-#line 409 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 403 "/home/annie/compiler-lab/src/parser/parser.y"
                    {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "*");
         (yyval.ptr) = t;
     }
-#line 2429 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2431 "parser.tab.c"
     break;
 
   case 69: /* exp: exp DIV exp  */
-#line 414 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 408 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "/");
         (yyval.ptr) = t;
     }
-#line 2439 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2441 "parser.tab.c"
     break;
 
   case 70: /* exp: exp MOD exp  */
-#line 419 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 413 "/home/annie/compiler-lab/src/parser/parser.y"
                   {
         ASTNode *t = mknode(2, BINARY_EXP, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         strcpy(t->type_id, "%");
         (yyval.ptr) = t;
     }
-#line 2449 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2451 "parser.tab.c"
     break;
 
   case 71: /* exp: INC exp  */
-#line 424 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 418 "/home/annie/compiler-lab/src/parser/parser.y"
                         {
         ASTNode *t = mknode(1, UNARY_EXP, yylineno, (yyvsp[0].ptr));
         strcpy(t->type_id, "++");
         (yyval.ptr) = t;
     }
-#line 2459 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2461 "parser.tab.c"
     break;
 
   case 72: /* exp: exp INC  */
-#line 429 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 423 "/home/annie/compiler-lab/src/parser/parser.y"
                         {
         ASTNode *t = mknode(1, POST_INC_EXP, yylineno, (yyvsp[-1].ptr));
         strcpy(t->type_id, "++");
         (yyval.ptr) = t;
     }
-#line 2469 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2471 "parser.tab.c"
     break;
 
   case 73: /* exp: DEC exp  */
-#line 434 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 428 "/home/annie/compiler-lab/src/parser/parser.y"
                         {
         ASTNode *t = mknode(1, UNARY_EXP, yylineno, (yyvsp[0].ptr));
         strcpy(t->type_id, "--");
         (yyval.ptr) = t;
     }
-#line 2479 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2481 "parser.tab.c"
     break;
 
   case 74: /* exp: exp DEC  */
-#line 439 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 433 "/home/annie/compiler-lab/src/parser/parser.y"
                         {
         ASTNode *t = mknode(1, POST_DEC_EXP, yylineno, (yyvsp[-1].ptr));
         strcpy(t->type_id, "--");
         (yyval.ptr) = t;
     }
-#line 2489 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2491 "parser.tab.c"
     break;
 
   case 75: /* exp: MINUS exp  */
-#line 444 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 438 "/home/annie/compiler-lab/src/parser/parser.y"
                              {
         ASTNode *t = mknode(1, UNARY_EXP, yylineno, (yyvsp[0].ptr));
         strcpy(t->type_id, "-");
         (yyval.ptr) = t;
     }
-#line 2499 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2501 "parser.tab.c"
     break;
 
   case 76: /* exp: PLUS exp  */
-#line 449 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 443 "/home/annie/compiler-lab/src/parser/parser.y"
                            {
         ASTNode *t = mknode(1, UNARY_EXP, yylineno, (yyvsp[0].ptr));
         strcpy(t->type_id, "+");
         (yyval.ptr) = t;
     }
-#line 2509 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2511 "parser.tab.c"
     break;
 
   case 77: /* exp: NOT exp  */
-#line 454 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 448 "/home/annie/compiler-lab/src/parser/parser.y"
               {
         ASTNode *t = mknode(1, UNARY_EXP, yylineno, (yyvsp[0].ptr));
         strcpy(t->type_id, "!");
         (yyval.ptr) = t;
     }
-#line 2519 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2521 "parser.tab.c"
     break;
 
   case 78: /* exp: LP exp RP  */
-#line 459 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 453 "/home/annie/compiler-lab/src/parser/parser.y"
                 {
         (yyval.ptr) = (yyvsp[-1].ptr);
     }
-#line 2527 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2529 "parser.tab.c"
     break;
 
-  case 79: /* exp: ID LP args RP  */
-#line 462 "/home/annie/compiler-lab/src/parser/parser.y"
-                    {
+  case 79: /* exp: TOKEN_ID LP args RP  */
+#line 456 "/home/annie/compiler-lab/src/parser/parser.y"
+                          {
         ASTNode *t = mknode(2, FUNC_CALL, yylineno, 
                            mknode(0, ID_NODE, yylineno), (yyvsp[-1].ptr));
         strcpy(t->ptr[0]->type_id, (yyvsp[-3].type_id));
         (yyval.ptr) = t;
     }
-#line 2538 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2540 "parser.tab.c"
     break;
 
-  case 80: /* exp: ID LP RP  */
-#line 468 "/home/annie/compiler-lab/src/parser/parser.y"
-               {
+  case 80: /* exp: TOKEN_ID LP RP  */
+#line 462 "/home/annie/compiler-lab/src/parser/parser.y"
+                     {
         ASTNode *t = mknode(1, FUNC_CALL, yylineno, 
                            mknode(0, ID_NODE, yylineno));
         strcpy(t->ptr[0]->type_id, (yyvsp[-2].type_id));
         (yyval.ptr) = t;
     }
-#line 2549 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2551 "parser.tab.c"
     break;
 
   case 81: /* exp: exp LB exp RB  */
-#line 474 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 468 "/home/annie/compiler-lab/src/parser/parser.y"
                     {
         ASTNode *t = mknode(2, ARRAY_ACCESS, yylineno, (yyvsp[-3].ptr), (yyvsp[-1].ptr));
         (yyval.ptr) = t;
     }
-#line 2558 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2560 "parser.tab.c"
     break;
 
-  case 82: /* exp: ID  */
-#line 478 "/home/annie/compiler-lab/src/parser/parser.y"
-         {
+  case 82: /* exp: TOKEN_ID  */
+#line 472 "/home/annie/compiler-lab/src/parser/parser.y"
+               {
         ASTNode *t = mknode(0, ID_NODE, yylineno);
         strcpy(t->type_id, (yyvsp[0].type_id));
         (yyval.ptr) = t;
     }
-#line 2568 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2570 "parser.tab.c"
     break;
 
-  case 83: /* exp: INT  */
-#line 483 "/home/annie/compiler-lab/src/parser/parser.y"
-          {
+  case 83: /* exp: TOKEN_INT  */
+#line 477 "/home/annie/compiler-lab/src/parser/parser.y"
+                {
         ASTNode *t = mknode(0, INT_NODE, yylineno);
         t->type_int = (yyvsp[0].type_int);
         (yyval.ptr) = t;
     }
-#line 2578 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2580 "parser.tab.c"
     break;
 
-  case 84: /* exp: FLOAT  */
-#line 488 "/home/annie/compiler-lab/src/parser/parser.y"
-            {
+  case 84: /* exp: TOKEN_FLOAT  */
+#line 482 "/home/annie/compiler-lab/src/parser/parser.y"
+                  {
         ASTNode *t = mknode(0, FLOAT_NODE, yylineno);
         t->type_float = (yyvsp[0].type_float);
         (yyval.ptr) = t;
     }
-#line 2588 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2590 "parser.tab.c"
     break;
 
-  case 85: /* exp: CHAR  */
-#line 493 "/home/annie/compiler-lab/src/parser/parser.y"
-           {
+  case 85: /* exp: TOKEN_CHAR  */
+#line 487 "/home/annie/compiler-lab/src/parser/parser.y"
+                 {
         ASTNode *t = mknode(0, CHAR_NODE, yylineno);
         t->type_int = (yyvsp[0].type_int);  // 字符值存储在type_int中
         (yyval.ptr) = t;
     }
-#line 2598 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2600 "parser.tab.c"
     break;
 
   case 86: /* args: exp  */
-#line 501 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 495 "/home/annie/compiler-lab/src/parser/parser.y"
           {
         ASTNode *t = mknode(1, ARGS, yylineno, (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2607 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2609 "parser.tab.c"
     break;
 
   case 87: /* args: exp COMMA args  */
-#line 505 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 499 "/home/annie/compiler-lab/src/parser/parser.y"
                      {
         ASTNode *t = mknode(2, ARGS, yylineno, (yyvsp[-2].ptr), (yyvsp[0].ptr));
         (yyval.ptr) = t;
     }
-#line 2616 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2618 "parser.tab.c"
     break;
 
 
-#line 2620 "/home/annie/compiler-lab/build/parser.tab.c"
+#line 2622 "parser.tab.c"
 
       default: break;
     }
@@ -2845,7 +2847,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 511 "/home/annie/compiler-lab/src/parser/parser.y"
+#line 505 "/home/annie/compiler-lab/src/parser/parser.y"
 
 
 void yyerror(const char *s) {

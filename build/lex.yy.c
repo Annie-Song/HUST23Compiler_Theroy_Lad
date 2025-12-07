@@ -1,6 +1,6 @@
-#line 2 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 2 "lex.yy.c"
 
-#line 4 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 4 "lex.yy.c"
 
 #define  YY_INT_ALIGNED short int
 
@@ -562,10 +562,10 @@ int yycolumn = 1;
     yycolumn += yyleng;
 
 extern YYSTYPE yylval;
-#line 566 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 566 "lex.yy.c"
 /* 正则表达式定义 */
 /* 注释 */
-#line 569 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 569 "lex.yy.c"
 
 #define INITIAL 0
 
@@ -785,7 +785,7 @@ YY_DECL
 #line 33 "/home/annie/compiler-lab/src/lexer/lex.l"
 
 
-#line 789 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 789 "lex.yy.c"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -855,22 +855,22 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 YY_RULE_SETUP
 #line 35 "/home/annie/compiler-lab/src/lexer/lex.l"
-{ return TYPE_INT; }
+{ return TOKEN_TYPE_INT; }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
 #line 36 "/home/annie/compiler-lab/src/lexer/lex.l"
-{ return TYPE_FLOAT; }
+{ return TOKEN_TYPE_FLOAT; }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
 #line 37 "/home/annie/compiler-lab/src/lexer/lex.l"
-{ return TYPE_CHAR; }
+{ return TOKEN_TYPE_CHAR; }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
 #line 38 "/home/annie/compiler-lab/src/lexer/lex.l"
-{ return TYPE_VOID; }
+{ return TOKEN_TYPE_VOID; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
@@ -917,7 +917,7 @@ YY_RULE_SETUP
 #line 48 "/home/annie/compiler-lab/src/lexer/lex.l"
 { 
     strcpy(yylval.type_id, yytext); 
-    return ID; 
+    return TOKEN_ID; 
 }
 	YY_BREAK
 case 14:
@@ -925,7 +925,7 @@ YY_RULE_SETUP
 #line 53 "/home/annie/compiler-lab/src/lexer/lex.l"
 { 
     yylval.type_int = atoi(yytext); 
-    return INT; 
+    return TOKEN_INT; 
 }
 	YY_BREAK
 case 15:
@@ -933,7 +933,7 @@ YY_RULE_SETUP
 #line 58 "/home/annie/compiler-lab/src/lexer/lex.l"
 { 
     yylval.type_float = atof(yytext); 
-    return FLOAT; 
+    return TOKEN_FLOAT; 
 }
 	YY_BREAK
 case 16:
@@ -954,7 +954,7 @@ YY_RULE_SETUP
         }
     }
     yylval.type_int = (int)ch;
-    return CHAR; 
+    return TOKEN_CHAR; 
 }
 	YY_BREAK
 case 17:
@@ -964,7 +964,7 @@ YY_RULE_SETUP
     // 去掉引号并处理转义字符
     strncpy(yylval.type_id, yytext+1, strlen(yytext)-2);
     yylval.type_id[strlen(yytext)-2] = '\0';
-    return STRING;
+    return TOKEN_STRING;
 }
 	YY_BREAK
 case 18:
@@ -1157,7 +1157,7 @@ YY_RULE_SETUP
 #line 134 "/home/annie/compiler-lab/src/lexer/lex.l"
 ECHO;
 	YY_BREAK
-#line 1161 "/home/annie/compiler-lab/build/lex.yy.c"
+#line 1161 "lex.yy.c"
 case YY_STATE_EOF(INITIAL):
 	yyterminate();
 

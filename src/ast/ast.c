@@ -10,10 +10,10 @@ const char *get_node_name(int kind) {
         case EXT_VAR_DEF: return "EXT_VAR_DEF";
         case FUNC_DEF: return "FUNC_DEF";
         case FUNC_DEC: return "FUNC_DEC";
-        case TYPE_NODE_INT: return "TYPE_INT";
-        case TYPE_NODE_FLOAT: return "TYPE_FLOAT";
-        case TYPE_NODE_CHAR: return "TYPE_CHAR";
-        case TYPE_NODE_VOID: return "TYPE_VOID";
+        case TYPE_NODE_INT: return "DT_INT";
+        case TYPE_NODE_FLOAT: return "DT_FLOAT";
+        case TYPE_NODE_CHAR: return "DT_CHAR";
+        case TYPE_NODE_VOID: return "DT_VOID";
         case EXT_DEC_LIST: return "EXT_DEC_LIST";
         case ARRAY_DEC: return "ARRAY_DEC";
         case ID_NODE: return "ID";

@@ -1,0 +1,159 @@
+#ifndef DEF_H
+#define DEF_H
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+
+/* YYSTYPE 定义 */
+typedef union {
+    int type_int;
+    float type_float;
+    char type_id[32];
+    struct ASTNode *ptr;
+} YYSTYPE;
+
+/* ASTNode 前向声明 */
+typedef struct ASTNode ASTNode;
+
+/* ================== 阶段二新增 ================== */
+
+/* 错误类型枚举（至少15种） */
+typedef enum {
+    ERR_UNDEFINED_VAR = 1,     // 变量未定义
+    ERR_UNDEFINED_FUNC,        // 函数未定义
+    ERR_REDEFINE_VAR,          // 变量重复定义
+    ERR_REDEFINE_FUNC,         // 函数重复定义
+    ERR_TYPE_MISMATCH,         // 类型不匹配
+    ERR_ARRAY_SUBSCRIPT,       // 数组下标非整数
+    ERR_NOT_ARRAY,             // 对非数组使用下标
+    ERR_PARAM_COUNT,           // 参数个数不匹配
+    ERR_PARAM_TYPE,            // 参数类型不匹配
+    ERR_RETURN_TYPE,           // 返回类型不匹配
+    ERR_BREAK_OUT_LOOP,        // break不在循环中
+    ERR_CONTINUE_OUT_LOOP,     // continue不在循环中
+    ERR_NOT_LVALUE,            // 对非左值赋值
+    ERR_ARRAY_INIT,            // 数组初始化维度不匹配
+    ERR_STRUCT_MEMBER,         // 结构体成员不存在
+    ERR_ASSIGN_TYPE,           // 赋值类型不匹配
+    ERR_CONDITION_TYPE,        // 条件表达式类型错误
+    ERR_DIVIDE_ZERO,           // 除以零（可选）
+    ERR_ARRAY_DIM_MISMATCH,    // 数组维度不匹配
+    ERR_FUNC_NO_RETURN         // 函数缺少return语句
+} ErrorType;
+
+/* 数据类型枚举 */
+typedef enum {
+    TYPE_VOID = 0,
+    TYPE_INT,
+    TYPE_FLOAT,
+    TYPE_CHAR,
+    TYPE_ARRAY,
+    TYPE_FUNCTION,
+    TYPE_STRUCT
+} DataType;
+
+/* 符号种类 */
+typedef enum {
+    KIND_VAR,
+    KIND_FUNC,
+    KIND_ARRAY,
+    KIND_PARAM,
+    KIND_TEMP,
+    KIND_STRUCT
+} SymbolKind;
+
+/* 符号表项 */
+typedef struct Symbol {
+    char name[32];           // 符号名
+    char alias[16];          // 别名（用于中间代码）
+    DataType type;           // 数据类型
+    SymbolKind kind;         // 符号种类
+    int level;               // 作用域层级（0:全局，>0:局部）
+    int offset;              // 在活动记录中的偏移量
+    int size;                // 大小（字节）
+    
+    /* 额外信息 */
+    union {
+        struct {             // 数组信息
+            int dims;        // 维数
+            int *dim_sizes;  // 各维大小
+        } array;
+        struct {             // 函数信息
+            DataType return_type;
+            int param_count;
+            DataType *param_types;
+        } func;
+        struct {             // 结构体信息
+            int member_count;
+            struct Symbol **members;
+        } struc;
+    } extra;
+    
+    struct Symbol *next;     // 链表指针
+} Symbol;
+
+/* 符号表（哈希表实现，简单快速） */
+#define SYMBOL_TABLE_SIZE 211  // 素数，减少冲突
+
+typedef struct SymbolTable {
+    Symbol *hash_table[SYMBOL_TABLE_SIZE];  // 哈希表
+    Symbol *scope_stack[32];                 // 作用域栈顶指针
+    int current_level;                       // 当前作用域层级
+    int temp_counter;                        // 临时变量计数器
+    int error_count;                         // 错误计数器
+} SymbolTable;
+
+/* 全局符号表实例 */
+extern SymbolTable symbol_table;
+
+/* 抽象语法树结点类型定义 */
+struct ASTNode {
+    int kind;                    // 结点类型
+    union {
+        char type_id[32];        // 标识符名字
+        int type_int;            // 整型常量值
+        float type_float;        // 浮点常量值
+    };
+
+    /* 阶段二新增字段 */
+    Symbol *symbol_ref;          // 指向符号表中的项
+    DataType expr_type;          // 表达式类型
+    int is_lvalue;               // 是否为左值
+    Type *type_info;          // 表达式类型信息（使用新类型系统）
+
+    struct ASTNode *ptr[4];      // 子树指针，最多4棵子树
+    int place;                   // 存放（临时）变量在符号表的位置序号
+    char Etrue[15], Efalse[15]; // 布尔表达式真假转移目标
+    char Snext[15];              // 结点对应语句执行后的下一条语句位置
+    struct CodeNode *code;       // 该结点中间代码链表头指针
+    int type;                    // 表达式类型
+    int pos;                     // 语法单位所在位置行号
+    int offset;                  // 偏移量
+    int width;                   // 占数据字节数
+    int num;                     // 计数器，可用于统计形参个数
+};
+
+/* 符号表操作函数 */
+void init_symbol_table(void);
+int insert_symbol(Symbol *sym);
+Symbol *lookup_symbol(const char *name);
+Symbol *lookup_current_scope(const char *name);
+void enter_scope(void);
+void exit_scope(void);
+void print_symbol_table(void);  // 条件编译控制
+
+/* 语义错误处理 */
+void semantic_error(int line, int col, ErrorType err_type, const char *msg);
+void print_semantic_errors(void);
+
+/* 抽象语法树操作函数 */
+ASTNode *mknode(int num, int kind, int pos, ...);
+void display(ASTNode *T, int indent);
+void free_ast(ASTNode *T);
+
+/* 哈希函数 */
+unsigned int hash_pjw(const char *name);
+
+#endif

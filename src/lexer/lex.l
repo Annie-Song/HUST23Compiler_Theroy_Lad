@@ -32,10 +32,10 @@ block_comment "/"\*([^*]|\*+[^*/])*\*+"/"
 
 %%
 
-"int"       { return TYPE_INT; }
-"float"     { return TYPE_FLOAT; }
-"char"      { return TYPE_CHAR; }
-"void"      { return TYPE_VOID; }
+"int"       { return TOKEN_TYPE_INT; }
+"float"     { return TOKEN_TYPE_FLOAT; }
+"char"      { return TOKEN_TYPE_CHAR; }
+"void"      { return TOKEN_TYPE_VOID; }
 "if"        { return IF; }
 "else"      { return ELSE; }
 "while"     { return WHILE; }
@@ -47,17 +47,17 @@ block_comment "/"\*([^*]|\*+[^*/])*\*+"/"
 
 {id}        { 
     strcpy(yylval.type_id, yytext); 
-    return ID; 
+    return TOKEN_ID; 
 }
 
 {int_const} { 
     yylval.type_int = atoi(yytext); 
-    return INT; 
+    return TOKEN_INT; 
 }
 
 {float_const} { 
     yylval.type_float = atof(yytext); 
-    return FLOAT; 
+    return TOKEN_FLOAT; 
 }
 
 {char_const} { 
@@ -75,14 +75,14 @@ block_comment "/"\*([^*]|\*+[^*/])*\*+"/"
         }
     }
     yylval.type_int = (int)ch;
-    return CHAR; 
+    return TOKEN_CHAR; 
 }
 
 {string_const} {
     // 去掉引号并处理转义字符
     strncpy(yylval.type_id, yytext+1, strlen(yytext)-2);
     yylval.type_id[strlen(yytext)-2] = '\0';
-    return STRING;
+    return TOKEN_STRING;
 }
 
 "++"        { return INC; }

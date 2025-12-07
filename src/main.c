@@ -2,9 +2,13 @@
 #include <stdlib.h>
 #include "utils/def.h"
 #include "ast/ast.h"
+#include "/home/annie/compiler-lab/src/semantic/semantic.h"
 
 // 条件编译开关：是否显示AST
 #define SHOW_AST 1
+
+// 声明全局根节点（在parser.y中定义）
+extern ASTNode *root;
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
@@ -37,8 +41,16 @@ int main(int argc, char *argv[]) {
         // 条件编译：显示抽象语法树
         #if SHOW_AST
             printf("\n=== Abstract Syntax Tree ===\n");
-            // AST根节点通过全局变量传递，这里需要根据实际实现调整
+             if (root) {
+                display(root, 0);
+            }
         #endif
+
+        // ==================== 阶段二：语义分析 ====================
+        #ifdef PHASE2
+            semantic_analysis(root);
+        #endif
+
     } else {
         printf("\n✗ Parsing failed!\n");
     }
