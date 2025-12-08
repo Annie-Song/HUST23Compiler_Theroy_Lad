@@ -45,11 +45,6 @@ static void check_var_dec(ASTNode *node, Type *type, int is_global);
 static void check_array_dec(ASTNode *node, Type *type, int is_global);
 static void check_init_dec(ASTNode *node, Type *type, int is_global);
 static void check_func_def(ASTNode *node);
-static int get_param_count(ASTNode *node);
-static Type **get_param_types(ASTNode *node, int param_count);
-static void get_param_types_recursive(ASTNode *node, Type **types, int *index);
-static void check_param_list(ASTNode *node, SymbolEntry *func);
-static void check_param_dec(ASTNode *node, SymbolEntry *func);
 static void check_compound_stmt(ASTNode *node, SemanticContext *ctx);
 static void check_local_defs(ASTNode *node, SemanticContext *ctx);
 static void check_def(ASTNode *node, SemanticContext *ctx);
@@ -71,9 +66,9 @@ static void check_while_stmt(ASTNode *node, SemanticContext *ctx);
 static void check_for_stmt(ASTNode *node, SemanticContext *ctx);
 static void check_break_stmt(ASTNode *node, SemanticContext *ctx);
 static void check_continue_stmt(ASTNode *node, SemanticContext *ctx);
-static Type *get_expr_type(ASTNode *node, SemanticContext *ctx);  /* 添加这行 */
+static Type *get_expr_type(ASTNode *node, SemanticContext *ctx);
 static Type *get_type_from_ast(ASTNode *node);
-static int type_compatible(Type *t1, Type *t2);  /* 确保这个声明在文件开头 */
+static int type_compatible(Type *t1, Type *t2);
 
 /* ================== 工具函数 ================== */
 
@@ -126,7 +121,7 @@ static Type *get_type_from_ast(ASTNode *node) {
     }
 }
 
-/* 获取表达式类型 - 移到工具函数部分 */
+/* 获取表达式类型 */
 static Type *get_expr_type(ASTNode *node, SemanticContext *ctx) {
     if (!node) return new_basic_type(TYPE_VOID);
     
@@ -226,7 +221,11 @@ static void check_global_var_def(ASTNode *node) {
     Type *type = get_type_from_ast(spec);
     
     /* 处理声明列表 */
-    check_ext_dec_list(decl, type, 1);
+    if (decl->kind == INIT_DEC) {
+        check_init_dec(decl, type, 1);
+    } else {
+        check_ext_dec_list(decl, type, 1);
+    }
     
     free_type(type);
 }
@@ -443,84 +442,50 @@ static void check_func_def(ASTNode *node) {
     printf("[DEBUG] === EXIT check_func_def ===\n\n");
 }
 
-/* 获取参数个数 */
-static int get_param_count(ASTNode *node) {
-    if (!node) return 0;
-    
-    int count = 0;
-    if (node->kind == VAR_LIST) {
-        count = 1;
-        if (node->ptr[1]) {
-            count += get_param_count(node->ptr[1]);
-        }
-    } else if (node->kind == PARAM_DEC) {
-        count = 1;
-    }
-    
-    return count;
-}
-
-/* 获取参数类型数组 */
-static Type **get_param_types(ASTNode *node, int param_count) {
-    if (!node || param_count <= 0) return NULL;
-    
-    Type **types = (Type **)malloc(param_count * sizeof(Type *));
-    if (!types) return NULL;
-    
-    int index = 0;
-    get_param_types_recursive(node, types, &index);
-    
-    return types;
-}
-
-/* 递归获取参数类型 */
-static void get_param_types_recursive(ASTNode *node, Type **types, int *index) {
-    if (!node || !types || !index) return;
-    
-    if (node->kind == VAR_LIST) {
-        if (node->ptr[0]) get_param_types_recursive(node->ptr[0], types, index);
-        if (node->ptr[1]) get_param_types_recursive(node->ptr[1], types, index);
-    } else if (node->kind == PARAM_DEC) {
-        if (*index < MAX_PARAMS && node->ptr[0]) {
-            types[*index] = get_type_from_ast(node->ptr[0]);
-            (*index)++;
-        }
-    }
-}
-
-/* 检查参数列表 */
-static void check_param_list(ASTNode *node, SymbolEntry *func) {
-    if (!node || !func) return;
-    
-    if (node->kind == VAR_LIST) {
-        if (node->ptr[0]) check_param_dec(node->ptr[0], func);
-        if (node->ptr[1]) check_param_list(node->ptr[1], func);
-    } else if (node->kind == PARAM_DEC) {
-        check_param_dec(node, func);
-    }
-}
-
 /* 检查复合语句 */
 static void check_compound_stmt(ASTNode *node, SemanticContext *ctx) {
     if (!node || node->kind != COMP_ST) return;
     
     printf("[DEBUG] check_compound_stmt at line %d\n", node->pos);
     
+    /* 打印所有孩子节点信息用于调试 */
+    for (int i = 0; i < 4; i++) {
+        if (node->ptr[i]) {
+            printf("[DEBUG] ptr[%d] = %p, kind = %d\n", 
+                   i, (void*)node->ptr[i], node->ptr[i]->kind);
+        } else {
+            printf("[DEBUG] ptr[%d] = NULL\n", i);
+        }
+    }
+    
     /* 进入新的作用域 */
     enter_scope(symbol_table, "block");
     
-    /* 检查声明部分 */
-    if (node->ptr[0]) {
-        printf("[DEBUG] Checking declarations\n");
+    /* 简化逻辑：直接检查所有可能的孩子 */
+    /* 先检查声明部分（如果有） */
+    if (node->ptr[0] && node->ptr[0]->kind == DEF_LIST) {
+        printf("[DEBUG] Found DEF_LIST at ptr[0]\n");
         check_local_defs(node->ptr[0], ctx);
     }
     
-    /* 检查语句部分 */
-    if (node->ptr[1]) {
-        printf("[DEBUG] Checking statements\n");
-        check_stmt_list(node->ptr[1], ctx);
+    /* 然后检查语句部分 */
+    /* 语句可能在 ptr[0]（如果没有声明）或 ptr[1]（如果有声明） */
+    ASTNode *stmt_node = NULL;
+    if (node->ptr[0] && node->ptr[0]->kind != DEF_LIST) {
+        /* 第一个孩子不是声明，那么它应该是语句 */
+        stmt_node = node->ptr[0];
+        printf("[DEBUG] Statements at ptr[0], kind = %d\n", stmt_node->kind);
+    } else if (node->ptr[1]) {
+        /* 第二个孩子是语句 */
+        stmt_node = node->ptr[1];
+        printf("[DEBUG] Statements at ptr[1], kind = %d\n", stmt_node->kind);
+    }
+    
+    if (stmt_node) {
+        printf("[DEBUG] Checking statements...\n");
+        check_stmt_list(stmt_node, ctx);
     } else {
-        printf("[DEBUG] No statements to check\n");
+        printf("[DEBUG] No statements found in COMP_ST\n");
     }
     
     /* 退出作用域 */
@@ -574,7 +539,7 @@ static void check_dec(ASTNode *node, Type *type, int is_global, SemanticContext 
     }
 }
 
-/* 检查语句列表 */
+/* 检查语句列表 - 修复版本 */
 static void check_stmt_list(ASTNode *node, SemanticContext *ctx) {
     if (!node) {
         printf("[DEBUG] check_stmt_list: node is NULL\n");
@@ -601,6 +566,12 @@ static void check_stmt_list(ASTNode *node, SemanticContext *ctx) {
         /* 如果node不是STMT_LIST，直接检查它 */
         printf("[DEBUG] Node is not STMT_LIST, checking as statement\n");
         check_stmt(node, ctx);
+        
+        /* 关键修复：确保return语句的设置被传播 */
+        if (node->kind == RETURN_STMT && ctx) {
+            printf("[DEBUG] check_stmt_list: processed RETURN_STMT, ensuring has_return flag is set\n");
+            ctx->has_return = 1;
+        }
     }
 }
 
@@ -611,7 +582,8 @@ static void check_stmt(ASTNode *node, SemanticContext *ctx) {
         return;
     }
     
-    printf("[DEBUG] check_stmt: kind = %d at line %d\n", node->kind, node->pos);
+    printf("[DEBUG] check_stmt: kind = %d at line %d, ctx pointer = %p\n", 
+           node->kind, node->pos, (void*)ctx);
     
     switch (node->kind) {
         case EXP_STMT:
@@ -628,7 +600,9 @@ static void check_stmt(ASTNode *node, SemanticContext *ctx) {
             
         case RETURN_STMT:
             printf("[DEBUG] Found RETURN_STMT - calling check_return_stmt\n");
+            printf("[DEBUG] check_stmt: ctx->has_return before = %d\n", ctx->has_return);
             check_return_stmt(node, ctx);
+            printf("[DEBUG] check_stmt: ctx->has_return after = %d\n", ctx->has_return);
             break;
             
         case IF_STMT:
@@ -659,6 +633,11 @@ static void check_stmt(ASTNode *node, SemanticContext *ctx) {
         case CONTINUE_STMT:
             printf("[DEBUG] Found CONTINUE_STMT\n");
             check_continue_stmt(node, ctx);
+            break;
+            
+        case DEF:
+            printf("[DEBUG] Found DEF as statement\n");
+            check_def(node, ctx);
             break;
             
         default:
@@ -924,12 +903,6 @@ static void check_func_call(ASTNode *node, SemanticContext *ctx) {
         node->type_info = new_basic_type(TYPE_INT);
         node->is_lvalue = 0;
         return;
-    }
-    
-    /* 如果有参数，检查参数（暂时简化处理） */
-    if (args_node) {
-        /* 这里可以添加参数检查逻辑 */
-        /* 例如：check_args(args_node, ctx, func_sym); */
     }
     
     /* 设置返回类型 */
