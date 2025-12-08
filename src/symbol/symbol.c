@@ -409,7 +409,10 @@ void mark_function_defined(SymbolTable *table, SymbolEntry *func) {
 
 /* 打印符号表 */
 void print_symbol_table(SymbolTable *table) {
-    if (!table) return;
+    if (!table) {
+        printf("Symbol table is NULL\n");
+        return;
+    }
     
     printf("\n=== Symbol Table ===\n");
     printf("Current Level: %d\n", table->current_level);
@@ -439,12 +442,13 @@ void print_symbol_table(SymbolTable *table) {
                 default: printf("%-12s ", "unknown");
             }
             
-            /* 类型 */
-            const char *type_str = "unknown";
+            /* 类型 - 安全处理 */
             if (entry->type) {
-                type_str = type_to_string(entry->type);
+                const char *type_str = type_to_string(entry->type);
+                printf("%-15s ", type_str);
+            } else {
+                printf("%-15s ", "null");
             }
-            printf("%-15s ", type_str);
             
             /* 其他信息 */
             printf("%-6d %-8d %-6s\n",

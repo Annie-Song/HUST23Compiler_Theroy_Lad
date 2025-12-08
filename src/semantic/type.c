@@ -227,6 +227,7 @@ const char *type_to_string(Type *type) {
                 case TYPE_INT: return "int";
                 case TYPE_FLOAT: return "float";
                 case TYPE_CHAR: return "char";
+                default: return "unknown_basic";
             }
             break;
             
@@ -239,9 +240,11 @@ const char *type_to_string(Type *type) {
         case TK_FUNCTION: {
             buffer[0] = '\0';
             strcat(buffer, "func(");
-            for (int i = 0; i < type->func.param_count; i++) {
-                if (i > 0) strcat(buffer, ", ");
-                strcat(buffer, type_to_string(type->func.param_types[i]));
+            if (type->func.param_types) {
+                for (int i = 0; i < type->func.param_count; i++) {
+                    if (i > 0) strcat(buffer, ", ");
+                    strcat(buffer, type_to_string(type->func.param_types[i]));
+                }
             }
             strcat(buffer, "):");
             strcat(buffer, type_to_string(type->func.return_type));
