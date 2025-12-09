@@ -314,7 +314,7 @@ static void check_var_dec(ASTNode *node, Type *type, int is_global) {
     }
 }
 
-/* 检查数组声明 */
+/* 检查数组声明 - 支持多维数组 */
 static void check_array_dec(ASTNode *node, Type *type, int is_global) {
     if (!node || node->kind != ARRAY_DEC) return;
     
@@ -322,10 +322,6 @@ static void check_array_dec(ASTNode *node, Type *type, int is_global) {
     ASTNode *array_size = node->ptr[1];
     
     if (!array_name || !array_size) return;
-    
-    if (array_name->kind != ID_NODE) return;
-    
-    char *name = array_name->type_id;
     
     /* 检查数组大小 */
     if (array_size->kind != INT_NODE || array_size->type_int <= 0) {
@@ -339,18 +335,73 @@ static void check_array_dec(ASTNode *node, Type *type, int is_global) {
     /* 创建数组类型 */
     Type *array_type = new_array_type(copy_type(type), size);
     
-    /* 插入符号表 */
-    int dim_sizes[1] = {size};
-    SymbolEntry *entry = insert_array(symbol_table, name, type, 1, dim_sizes);
-    if (entry) {
-        array_name->symbol_ref = entry;
-        array_name->type_info = array_type;
-        array_name->is_lvalue = 1;
-        /* 设置数组额外信息 */
-        array_name->array_info.array_size = size;
-        array_name->array_info.elem_type = copy_type(type);
-    } else {
+    /* 如果数组名还是数组声明，说明是多维数组 */
+    if (array_name->kind == ARRAY_DEC) {
+        /* 递归处理多维数组 */
+        check_array_dec(array_name, array_type, is_global);
+        /* 释放临时创建的类型 */
         free_type(array_type);
+    } else if (array_name->kind == ID_NODE) {
+        /* 到达变量名，插入符号表 */
+        char *name = array_name->type_id;
+        
+        /* 检查是否重定义 */
+        SymbolEntry *existing = lookup_current_scope(symbol_table, name);
+        if (existing) {
+            local_semantic_error(node->pos, 0, ERR_REDEFINE_VAR, 
+                               "variable '%s' redefined", name);
+            free_type(array_type);
+            return;
+        }
+        
+        /* 计算多维数组的总维度和各维度大小 */
+        /* 我们需要收集所有的维度信息 */
+        int dims = 1;
+        ASTNode *temp = node;
+        while (temp->kind == ARRAY_DEC && temp->ptr[0] && temp->ptr[0]->kind == ARRAY_DEC) {
+            dims++;
+            temp = temp->ptr[0];
+        }
+        
+        /* 分配维度数组 */
+        int *dim_sizes = (int *)malloc(dims * sizeof(int));
+        if (!dim_sizes) {
+            free_type(array_type);
+            return;
+        }
+        
+        /* 收集维度大小（从外层到内层） */
+        temp = node;
+        for (int i = 0; i < dims; i++) {
+            if (temp->kind == ARRAY_DEC && temp->ptr[1]) {
+                dim_sizes[i] = temp->ptr[1]->type_int;
+                temp = temp->ptr[0];
+            }
+        }
+        
+        /* 创建最终的数组类型 */
+        Type *final_array_type = array_type;
+        /* 从内层到外层创建类型 */
+        for (int i = dims - 2; i >= 0; i--) {
+            Type *temp_type = final_array_type;
+            final_array_type = new_array_type(temp_type, dim_sizes[i]);
+            free_type(temp_type);
+        }
+        
+        /* 插入符号表 */
+        SymbolEntry *entry = insert_array(symbol_table, name, type, dims, dim_sizes);
+        if (entry) {
+            array_name->symbol_ref = entry;
+            array_name->type_info = final_array_type;
+            array_name->is_lvalue = 1;
+            
+            /* 设置数组额外信息 */
+            array_name->array_info.array_size = dim_sizes[dims-1];  /* 最内层大小 */
+            array_name->array_info.elem_type = copy_type(type);
+        }
+        
+        free(dim_sizes);
+        /* 注意：final_array_type 现在被符号表管理，不要在这里释放 */
     }
 }
 
@@ -575,6 +626,9 @@ static void check_dec(ASTNode *node, Type *type, int is_global, SemanticContext 
     
     if (node->kind == INIT_DEC) {
         check_init_dec(node, type, is_global);
+    } else if (node->kind == ARRAY_DEC) {
+        /* 直接处理数组声明 */
+        check_array_dec(node, type, is_global);
     } else {
         check_var_dec(node, type, is_global);
     }
@@ -1025,7 +1079,7 @@ static void check_func_call(ASTNode *node, SemanticContext *ctx) {
     node->is_lvalue = 0;
 }
 
-/* 检查数组访问 */
+/* 检查数组访问 - 支持多维数组 */
 static void check_array_access(ASTNode *node, SemanticContext *ctx) {
     if (!node || !ctx) return;
     
@@ -1045,7 +1099,7 @@ static void check_array_access(ASTNode *node, SemanticContext *ctx) {
     check_expr(index_node, ctx);
     
     /* 检查是否为数组 */
-    if (array_node->type_info && array_node->type_info->kind != TK_ARRAY) {
+    if (!array_node->type_info || array_node->type_info->kind != TK_ARRAY) {
         local_semantic_error(array_node->pos, 0, ERR_NOT_ARRAY, 
                            "subscript on non-array type");
         node->type_info = new_basic_type(TYPE_INT);
@@ -1062,12 +1116,21 @@ static void check_array_access(ASTNode *node, SemanticContext *ctx) {
     }
     
     /* 数组访问的结果类型是数组元素类型 */
-    if (array_node->type_info && array_node->type_info->kind == TK_ARRAY) {
-        node->type_info = copy_type(array_node->type_info->array.elem);
+    Type *result_type = NULL;
+    if (array_node->type_info->kind == TK_ARRAY) {
+        result_type = copy_type(array_node->type_info->array.elem);
     } else {
-        node->type_info = new_basic_type(TYPE_INT);
+        result_type = new_basic_type(TYPE_INT);
     }
-    node->is_lvalue = 1;  /* 数组访问是左值 */
+    
+    /* 如果结果还是数组，设置is_lvalue为1，否则为0 */
+    if (result_type && result_type->kind == TK_ARRAY) {
+        node->is_lvalue = 1;  /* 多维数组访问仍然是左值 */
+        node->type_info = result_type;
+    } else {
+        node->is_lvalue = 1;  /* 数组元素访问也是左值 */
+        node->type_info = result_type;
+    }
 }
 
 /* 检查函数参数 - 新增函数 */

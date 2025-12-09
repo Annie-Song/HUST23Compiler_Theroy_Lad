@@ -78,6 +78,52 @@ ASTNode *mknode(int num, int kind, int pos, ...) {
     return T;
 }
 
+/* 辅助函数：递归显示数组维度 */
+static void display_array_dimensions(ASTNode *node, int indent) {
+    if (!node) return;
+    
+    if (node->kind == ARRAY_DEC) {
+        // 显示数组大小
+        if (node->ptr[1]) {
+            display(node->ptr[1], indent + 2);  // 显示数组大小
+        }
+        
+        // 递归显示内层数组
+        if (node->ptr[0]) {
+            display_array_dimensions(node->ptr[0], indent);
+        }
+    } else if (node->kind == ID_NODE) {
+        // 显示数组名
+        display(node, indent);
+    }
+}
+
+/* 辅助函数：获取数组声明字符串 */
+static void get_array_declaration_string(ASTNode *node, char *buffer, int buffer_size) {
+    if (!node || !buffer) return;
+    
+    buffer[0] = '\0';
+    
+    if (node->kind == ID_NODE) {
+        snprintf(buffer, buffer_size, "%s", node->type_id);
+    } else if (node->kind == ARRAY_DEC) {
+        // 递归构建数组声明
+        char inner_buffer[256];
+        if (node->ptr[0]) {
+            get_array_declaration_string(node->ptr[0], inner_buffer, sizeof(inner_buffer));
+        } else {
+            inner_buffer[0] = '\0';
+        }
+        
+        // 添加当前维度
+        if (node->ptr[1] && node->ptr[1]->kind == INT_NODE) {
+            snprintf(buffer, buffer_size, "%s[%d]", inner_buffer, node->ptr[1]->type_int);
+        } else {
+            snprintf(buffer, buffer_size, "%s[]", inner_buffer);
+        }
+    }
+}
+
 void display(ASTNode *T, int indent) {
     if (!T) return;
     
@@ -143,6 +189,62 @@ void display(ASTNode *T, int indent) {
             printf("String Constant: %s\n", T->type_id);
             break;
             
+        case ARRAY_DEC:
+            // 改进数组声明的显示
+            printf("Array Declaration\n");
+            
+            // 尝试构建并显示完整的数组声明字符串
+            char array_decl[256];
+            get_array_declaration_string(T, array_decl, sizeof(array_decl));
+            if (array_decl[0] != '\0') {
+                for (int i = 0; i < indent + 2; i++) printf("  ");
+                printf("Declaration: %s\n", array_decl);
+            }
+            
+            // 递归显示数组维度信息
+            if (T->ptr[0]) {
+                for (int i = 0; i < indent + 2; i++) printf("  ");
+                printf("Array Name/Dimensions:\n");
+                
+                // 显示数组维度的结构
+                ASTNode *current = T;
+                int dim_count = 0;
+                while (current && current->kind == ARRAY_DEC) {
+                    dim_count++;
+                    current = current->ptr[0];
+                }
+                
+                for (int i = 0; i < indent + 4; i++) printf("  ");
+                printf("Dimensions: %d\n", dim_count);
+                
+                // 显示每个维度的大小
+                current = T;
+                int dim_idx = 0;
+                while (current && current->kind == ARRAY_DEC) {
+                    for (int i = 0; i < indent + 4; i++) printf("  ");
+                    printf("Dimension %d: ", dim_idx + 1);
+                    
+                    if (current->ptr[1] && current->ptr[1]->kind == INT_NODE) {
+                        printf("size = %d\n", current->ptr[1]->type_int);
+                    } else if (current->ptr[1]) {
+                        printf("size = ");
+                        display(current->ptr[1], 0);
+                    } else {
+                        printf("unknown size\n");
+                    }
+                    
+                    dim_idx++;
+                    current = current->ptr[0];
+                }
+                
+                // 显示最终的标识符
+                if (current && current->kind == ID_NODE) {
+                    for (int i = 0; i < indent + 4; i++) printf("  ");
+                    printf("Array Name: %s\n", current->type_id);
+                }
+            }
+            break;
+            
         case ASSIGN_EXP:
             printf("Assignment: %s\n", T->type_id);
             display(T->ptr[0], indent + 2);
@@ -173,8 +275,16 @@ void display(ASTNode *T, int indent) {
             
         case ARRAY_ACCESS:
             printf("Array Access\n");
-            display(T->ptr[0], indent + 2);  // 数组名
-            display(T->ptr[1], indent + 2);  // 下标表达式
+            if (T->ptr[0]) {
+                for (int i = 0; i < indent + 2; i++) printf("  ");
+                printf("Array:\n");
+                display(T->ptr[0], indent + 4);
+            }
+            if (T->ptr[1]) {
+                for (int i = 0; i < indent + 2; i++) printf("  ");
+                printf("Index:\n");
+                display(T->ptr[1], indent + 4);
+            }
             break;
             
         case IF_STMT:
@@ -245,10 +355,6 @@ void display(ASTNode *T, int indent) {
             printf("External Declaration List\n");
             break;
             
-        case ARRAY_DEC:
-            printf("Array Declaration\n");
-            break;
-            
         case PARAM_DEC:
             printf("Parameter Declaration\n");
             break;
@@ -296,6 +402,7 @@ void display(ASTNode *T, int indent) {
             // 如果当前节点已经在上面处理过了，就不再递归处理
             int handled_in_switch = 0;
             switch (T->kind) {
+                case ARRAY_DEC:
                 case ASSIGN_EXP:
                 case BINARY_EXP:
                 case UNARY_EXP:
