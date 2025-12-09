@@ -70,6 +70,10 @@ static Type *get_expr_type(ASTNode *node, SemanticContext *ctx);
 static Type *get_type_from_ast(ASTNode *node);
 static int type_compatible(Type *t1, Type *t2);
 
+/* 新增函数声明 */
+static void check_func_params(ASTNode *node, Type *return_type);
+static void check_func_param(ASTNode *node);
+
 /* ================== 工具函数 ================== */
 
 /* 本地错误处理 */
@@ -85,14 +89,28 @@ static void local_semantic_error(int line, int col, ErrorType err_type, const ch
 
 /* 类型兼容性检查 */
 static int type_compatible(Type *t1, Type *t2) {
-    if (!t1 || !t2) return 0;
+    if (!t1 || !t2) {
+        printf("[DEBUG] type_compatible: one or both types are NULL\n");
+        return 0;
+    }
     
-    /* 简单实现：类型相同或都是基本类型 */
-    if (t1->kind == TK_BASIC && t2->kind == TK_BASIC) {
+    printf("[DEBUG] type_compatible: t1->kind=%d, t2->kind=%d\n", t1->kind, t2->kind);
+    
+    /* 如果类型完全相同 */
+    if (type_equal(t1, t2)) {
+        printf("[DEBUG] type_compatible: types are equal\n");
         return 1;
     }
     
-    return type_equal(t1, t2);
+    /* 如果都是基本类型，检查基本类型是否相同 */
+    if (t1->kind == TK_BASIC && t2->kind == TK_BASIC) {
+        printf("[DEBUG] type_compatible: both basic, t1->basic=%d, t2->basic=%d\n", 
+               t1->basic, t2->basic);
+        return t1->basic == t2->basic;
+    }
+    
+    printf("[DEBUG] type_compatible: types not compatible\n");
+    return 0;
 }
 
 /* 初始化语义分析 */
@@ -123,13 +141,23 @@ static Type *get_type_from_ast(ASTNode *node) {
 
 /* 获取表达式类型 */
 static Type *get_expr_type(ASTNode *node, SemanticContext *ctx) {
-    if (!node) return new_basic_type(TYPE_VOID);
-    
+    if (!node) {
+        printf("[DEBUG] get_expr_type: node is NULL\n");
+        return new_basic_type(TYPE_VOID);
+    }
+
     /* 如果还没检查过，先检查 */
     if (!node->type_info) {
+        printf("[DEBUG] get_expr_type: calling check_expr for node kind=%d\n", node->kind);
         check_expr(node, ctx);
     }
     
+     if (!node->type_info) {
+        printf("[DEBUG] get_expr_type: type_info still NULL after check_expr\n");
+        return new_basic_type(TYPE_INT);
+    }
+    
+    printf("[DEBUG] get_expr_type: returning type kind=%d\n", node->type_info->kind);
     return node->type_info;
 }
 
@@ -268,11 +296,14 @@ static void check_var_dec(ASTNode *node, Type *type, int is_global) {
             return;
         }
         
+        /* 复制类型给符号表 */
+        Type *type_for_symbol = copy_type(type);
+
         /* 插入符号表 */
         SymbolEntry *entry = insert_symbol(symbol_table, name, SK_VARIABLE, type);
         if (entry) {
             node->symbol_ref = entry;
-            node->type_info = type;
+            node->type_info = copy_type(type);
             node->is_lvalue = 1;
             node->is_const = 0;
         }
@@ -354,7 +385,7 @@ static void check_init_dec(ASTNode *node, Type *type, int is_global) {
 
 /* ================== 函数定义检查 ================== */
 
-/* 检查函数定义 - 简化版 */
+/* 检查函数定义 - 修复版本 */
 static void check_func_def(ASTNode *node) {
     if (!node || node->kind != FUNC_DEF) return;
     
@@ -379,13 +410,15 @@ static void check_func_def(ASTNode *node) {
     printf("[DEBUG] Function name: %s\n", func_name);
     
     /* 获取返回类型 */
-    Type *return_type = get_type_from_ast(spec);
-    printf("[DEBUG] Return type: %s\n", 
-           return_type->kind == TK_BASIC ? 
-           (return_type->basic == TYPE_INT ? "int" : 
-            return_type->basic == TYPE_VOID ? "void" : "unknown") : "complex");
+Type *return_type = get_type_from_ast(spec);
+printf("[DEBUG] check_func_def: return_type kind=%d\n", return_type->kind);
+
+/* 创建函数类型 */
+Type *func_type = new_func_type(return_type, NULL, 0);
+printf("[DEBUG] check_func_def: created func_type, func_type->func.return_type kind=%d\n", 
+       func_type->func.return_type ? func_type->func.return_type->kind : -1);
     
-    /* 插入函数符号 */
+    /* 插入函数符号 - 传递返回类型，不是函数类型 */
     SymbolEntry *func_sym = insert_function(symbol_table, func_name, return_type, 0);
     if (!func_sym) {
         printf("[DEBUG] Failed to insert function symbol\n");
@@ -403,11 +436,18 @@ static void check_func_def(ASTNode *node) {
     /* 设置上下文 */
     SemanticContext func_ctx = {0};
     func_ctx.in_function = 1;
-    func_ctx.return_type = return_type;
+    func_ctx.return_type = copy_type(return_type);  // 复制返回类型给上下文
     func_ctx.has_return = 0;
     func_ctx.symbol_table = symbol_table;
     
     printf("[DEBUG] Context created: has_return = %d\n", func_ctx.has_return);
+    
+    /* ===== 处理函数参数 ===== */
+    if (func_dec->kind == FUNC_DEC && func_dec->ptr[1]) {
+        printf("[DEBUG] Processing function parameters\n");
+        check_func_params(func_dec->ptr[1], return_type);
+    }
+    /* ===== 结束处理参数 ===== */
     
     /* 检查函数体 */
     if (body && body->kind == COMP_ST) {
@@ -436,9 +476,10 @@ static void check_func_def(ASTNode *node) {
     exit_scope(symbol_table);
     printf("[DEBUG] Exited function scope\n");
     
-    /* 清理 */
+    /* 清理 - 注意：func_type 现在由符号表管理，不要释放它 */
     free_type(return_type);
-    
+    free_type(func_ctx.return_type);
+   
     printf("[DEBUG] === EXIT check_func_def ===\n\n");
 }
 
@@ -648,10 +689,7 @@ static void check_stmt(ASTNode *node, SemanticContext *ctx) {
 
 /* 检查return语句 */
 static void check_return_stmt(ASTNode *node, SemanticContext *ctx) {
-    if (!node || !ctx) {
-        printf("[DEBUG] check_return_stmt: node or ctx is NULL\n");
-        return;
-    }
+    if (!node || !ctx) return;
     
     printf("[DEBUG] ===== ENTER check_return_stmt at line %d =====\n", node->pos);
     printf("[DEBUG] Before: ctx->has_return = %d\n", ctx->has_return);
@@ -664,6 +702,15 @@ static void check_return_stmt(ASTNode *node, SemanticContext *ctx) {
     if (node->ptr[0]) {
         printf("[DEBUG] Return has expression\n");
         Type *expr_type = get_expr_type(node->ptr[0], ctx);
+        
+        /* 新增调试信息 */
+        printf("[DEBUG] Return type: kind = %d, basic = %d\n", 
+               ctx->return_type->kind, 
+               ctx->return_type->kind == TK_BASIC ? ctx->return_type->basic : -1);
+        printf("[DEBUG] Expression type: kind = %d, basic = %d\n", 
+               expr_type->kind, 
+               expr_type->kind == TK_BASIC ? expr_type->basic : -1);
+        
         if (!type_compatible(ctx->return_type, expr_type)) {
             local_semantic_error(node->pos, 0, ERR_RETURN_TYPE, "return type mismatch");
         }
@@ -812,19 +859,55 @@ static void check_id_expr(ASTNode *node, SemanticContext *ctx) {
     if (!node || node->kind != ID_NODE) return;
     
     char *name = node->type_id;
+    printf("[DEBUG] check_id_expr: looking up %s\n", name);
     
     /* 查找符号 */
     SymbolEntry *sym = lookup_symbol(symbol_table, name);
     if (!sym) {
+        printf("[DEBUG] check_id_expr: symbol not found for %s\n", name);
         local_semantic_error(node->pos, 0, ERR_UNDEFINED_VAR, name);
-        node->type_info = new_basic_type(TYPE_INT);  /* 默认类型 */
+        node->type_info = new_basic_type(TYPE_INT);
         node->is_lvalue = 0;
         return;
     }
     
-    /* 设置节点信息 */
+    printf("[DEBUG] check_id_expr: found symbol, kind=%d, type=%p\n", 
+           sym->kind, (void*)sym->type);
+    
+    /* 详细检查类型结构 */
+    if (sym->type) {
+        printf("[DEBUG] check_id_expr: sym->type address: %p\n", (void*)sym->type);
+        printf("[DEBUG] check_id_expr: sym->type->kind: %d\n", sym->type->kind);
+        printf("[DEBUG] check_id_expr: sym->type->size: %d\n", sym->type->size);
+        printf("[DEBUG] check_id_expr: sym->type->align: %d\n", sym->type->align);
+        
+        if (sym->type->kind == TK_BASIC) {
+            printf("[DEBUG] check_id_expr: sym->type->basic: %d\n", sym->type->basic);
+        }
+    } else {
+        printf("[DEBUG] check_id_expr: WARNING: sym->type is NULL!\n");
+    }
+    
+    /* 检查类型指针是否有效 */
+    if (sym->type == NULL) {
+        printf("[DEBUG] check_id_expr: sym->type is NULL, using default int type\n");
+        node->type_info = new_basic_type(TYPE_INT);
+    } else if (sym->type->kind < 0 || sym->type->kind > 3) {
+        /* 无效的 type->kind 值 */
+        printf("[DEBUG] check_id_expr: WARNING: sym->type has invalid kind=%d, using default int type\n", 
+               sym->type->kind);
+        node->type_info = new_basic_type(TYPE_INT);
+    } else {
+        node->type_info = copy_type(sym->type);
+        if (node->type_info) {
+            printf("[DEBUG] check_id_expr: set type_info, kind=%d\n", node->type_info->kind);
+        } else {
+            printf("[DEBUG] check_id_expr: copy_type returned NULL!\n");
+            node->type_info = new_basic_type(TYPE_INT);
+        }
+    }
+    
     node->symbol_ref = sym;
-    node->type_info = copy_type(sym->type);
     node->is_lvalue = (sym->kind == SK_VARIABLE || 
                        sym->kind == SK_ARRAY || 
                        sym->kind == SK_PARAMETER);
@@ -895,22 +978,43 @@ static void check_func_call(ASTNode *node, SemanticContext *ctx) {
     }
     
     char *func_name = func_name_node->type_id;
+    printf("[DEBUG] check_func_call: looking up function %s\n", func_name);
     
     /* 查找函数符号 */
     SymbolEntry *func_sym = lookup_symbol(symbol_table, func_name);
     if (!func_sym || func_sym->kind != SK_FUNCTION) {
+        printf("[DEBUG] check_func_call: function %s not found or not a function\n", func_name);
         local_semantic_error(node->pos, 0, ERR_UNDEFINED_FUNC, func_name);
         node->type_info = new_basic_type(TYPE_INT);
         node->is_lvalue = 0;
         return;
     }
     
-    /* 设置返回类型 */
-    if (func_sym->type && func_sym->type->kind == TK_FUNCTION) {
-        node->type_info = copy_type(func_sym->type->func.return_type);
+    printf("[DEBUG] check_func_call: found function symbol, type=%p\n", (void*)func_sym->type);
+    
+    Type *return_type = NULL;
+    
+    /* 确定返回类型 */
+    if (func_sym->type) {
+        if (func_sym->type->kind == TK_FUNCTION) {
+            /* 函数类型：获取返回类型 */
+            printf("[DEBUG] check_func_call: function type found\n");
+            return_type = func_sym->type->func.return_type;
+        } else if (func_sym->type->kind == TK_BASIC) {
+            /* 基本类型：直接使用（旧式函数定义） */
+            printf("[DEBUG] check_func_call: basic type found (legacy)\n");
+            return_type = func_sym->type;
+        }
+    }
+    
+    if (return_type) {
+        printf("[DEBUG] check_func_call: returning type kind=%d\n", return_type->kind);
+        node->type_info = copy_type(return_type);
     } else {
+        printf("[DEBUG] check_func_call: no return type found, using int\n");
         node->type_info = new_basic_type(TYPE_INT);
     }
+    
     node->is_lvalue = 0;
 }
 
@@ -957,4 +1061,54 @@ static void check_array_access(ASTNode *node, SemanticContext *ctx) {
         node->type_info = new_basic_type(TYPE_INT);
     }
     node->is_lvalue = 1;  /* 数组访问是左值 */
+}
+
+/* 检查函数参数 - 新增函数 */
+static void check_func_params(ASTNode *node, Type *return_type) {
+    if (!node) return;
+    
+    printf("[DEBUG] check_func_params: node kind = %d\n", node->kind);
+    
+    if (node->kind == VAR_LIST) {
+        /* 参数列表 */
+        if (node->ptr[0]) {
+            check_func_param(node->ptr[0]);
+        }
+        if (node->ptr[1]) {
+            check_func_params(node->ptr[1], return_type);
+        }
+    } else if (node->kind == PARAM_DEC) {
+        /* 单个参数声明 */
+        check_func_param(node);
+    }
+}
+
+/* 检查单个函数参数 - 修复版本 */
+static void check_func_param(ASTNode *node) {
+    if (!node || node->kind != PARAM_DEC) return;
+    
+    ASTNode *spec = node->ptr[0];
+    ASTNode *var_dec = node->ptr[1];
+    
+    if (!spec || !var_dec) return;
+    
+    /* 获取参数类型 */
+    Type *param_type = get_type_from_ast(spec);
+    
+    /* 获取参数名 */
+    if (var_dec->kind == ID_NODE) {
+        char *param_name = var_dec->type_id;
+        printf("[DEBUG] Processing parameter: %s\n", param_name);
+        
+        /* 插入参数到符号表 */
+        SymbolEntry *param_sym = insert_symbol(symbol_table, param_name, SK_PARAMETER, param_type);
+        if (param_sym) {
+            var_dec->symbol_ref = param_sym;
+            var_dec->type_info = copy_type(param_type);  // 修复：复制类型
+            var_dec->is_lvalue = 1;
+            var_dec->is_const = 0;
+        }
+    }
+    
+    free_type(param_type);  // 释放原始类型
 }

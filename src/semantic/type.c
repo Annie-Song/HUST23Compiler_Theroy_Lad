@@ -112,27 +112,70 @@ Type *new_struct_type(const char *name, FieldList *fields) {
 
 /* 复制类型 */
 Type *copy_type(Type *src) {
-    if (!src) return NULL;
-    
-    Type *dst = (Type *)malloc(sizeof(Type));
-    if (!dst) return NULL;
-    
-    memcpy(dst, src, sizeof(Type));
-    
-    /* 深度复制需要递归处理的部分 */
-    if (src->kind == TK_ARRAY && src->array.elem) {
-        dst->array.elem = copy_type(src->array.elem);
-    } else if (src->kind == TK_FUNCTION) {
-        /* 函数类型需要深度复制参数类型 */
-        if (src->func.param_types && src->func.param_count > 0) {
-            dst->func.param_types = (Type **)malloc(src->func.param_count * sizeof(Type *));
-            for (int i = 0; i < src->func.param_count; i++) {
-                dst->func.param_types[i] = copy_type(src->func.param_types[i]);
-            }
-        }
-        dst->func.return_type = copy_type(src->func.return_type);
+     if (!src) {
+        printf("[DEBUG] copy_type: src is NULL\n");
+        return NULL;
     }
     
+     /* 检查 src 是否看起来像有效的 Type 结构 */
+    if (src->kind < 0 || src->kind > 3) {
+        printf("[DEBUG] copy_type: WARNING: src has invalid kind=%d, returning NULL\n", src->kind);
+        return NULL;
+    }
+    
+    printf("[DEBUG] copy_type: copying type kind=%d\n", src->kind);
+
+    Type *dst = (Type *)malloc(sizeof(Type));
+    if (!dst) {
+        printf("[DEBUG] copy_type: malloc failed\n");
+        return NULL;
+    }
+    
+    /* 手动复制基本字段 */
+    dst->kind = src->kind;
+    dst->size = src->size;
+    dst->align = src->align;
+    
+    /* 根据类型种类处理 */
+    switch (src->kind) {
+        case TK_BASIC:
+            printf("[DEBUG] copy_type: copying BASIC type, basic=%d\n", src->basic);
+            dst->basic = src->basic;
+            break;
+            
+        case TK_ARRAY:
+            printf("[DEBUG] copy_type: copying ARRAY type\n");
+            dst->array.elem = copy_type(src->array.elem);
+            dst->array.length = src->array.length;
+            break;
+            
+        case TK_FUNCTION:
+            printf("[DEBUG] copy_type: copying FUNCTION type\n");
+            dst->func.return_type = copy_type(src->func.return_type);
+            dst->func.param_count = src->func.param_count;
+            if (src->func.param_types && src->func.param_count > 0) {
+                dst->func.param_types = (Type **)malloc(src->func.param_count * sizeof(Type *));
+                for (int i = 0; i < src->func.param_count; i++) {
+                    dst->func.param_types[i] = copy_type(src->func.param_types[i]);
+                }
+            } else {
+                dst->func.param_types = NULL;
+            }
+            break;
+            
+        case TK_STRUCT:
+            printf("[DEBUG] copy_type: STRUCT type not supported yet\n");
+            /* 结构体复制比较复杂，暂时返回NULL */
+            free(dst);
+            return NULL;
+            
+        default:
+            printf("[DEBUG] copy_type: unknown type kind=%d\n", src->kind);
+            free(dst);
+            return NULL;
+    }
+    
+    printf("[DEBUG] copy_type: successfully copied type\n");
     return dst;
 }
 

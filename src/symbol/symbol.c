@@ -77,8 +77,26 @@ void destroy_symbol_table(SymbolTable *table) {
         SymbolEntry *entry = table->hash_table[i];
         while (entry) {
             SymbolEntry *next = entry->next_hash;
+            
+            /* 释放类型 */
+            if (entry->type) {
+                free_type(entry->type);
+            }
+            
+            /* 释放数组维度信息 */
+            if (entry->kind == SK_ARRAY && entry->array_info.dim_sizes) {
+                free(entry->array_info.dim_sizes);
+            }
+            
             free(entry);
             entry = next;
+        }
+    }
+    
+    /* 释放作用域栈 */
+    for (int i = 0; i <= table->scope_top; i++) {
+        if (table->scope_stack[i]) {
+            free(table->scope_stack[i]);
         }
     }
     
@@ -207,7 +225,7 @@ int check_redefinition(SymbolTable *table, const char *name) {
 /* 插入符号到符号表 */
 SymbolEntry *insert_symbol(SymbolTable *table, const char *name, 
                           SymbolKind kind, Type *type) {
-    if (!table || !name || !type) return NULL;
+    if (!table || !name) return NULL;  /* 注意：type可以为NULL（如标签）*/
     
     /* 检查重定义 */
     if (check_redefinition(table, name)) {
@@ -234,10 +252,10 @@ SymbolEntry *insert_symbol(SymbolTable *table, const char *name,
     }
     
     entry->kind = kind;
-    entry->type = type;  /* 注意：这里不复制type，由调用者管理 */
+    entry->type = type ? copy_type(type) : NULL;  /* 修改：复制类型 */
     entry->level = table->current_level;
     entry->offset = 0;
-    entry->size = get_type_size(type);
+    entry->size = type ? get_type_size(type) : 0;
     entry->is_const = 0;
     entry->is_ref = 0;
     
