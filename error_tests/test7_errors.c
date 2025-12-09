@@ -8,9 +8,9 @@ int main() {
     //int x = 20;          // 重复定义
     
     // 错误3：类型不匹配
-    int a = 10;
-    float b = 3.14;
-    a = b;               // 类型不匹配
+    //int a = 10;
+    //float b = 3.14;
+    //a = b;               // 类型不匹配
     
     // 错误4：break不在循环中
     //break;
@@ -19,10 +19,10 @@ int main() {
     //continue;
     
     // 错误6：函数缺少返回语句
-    //void no_return() {
+    void no_return() {
         int x = 10;
         // 缺少return
-    //}
+    }
     
     return 0;
 }
