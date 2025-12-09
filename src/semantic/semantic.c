@@ -73,7 +73,7 @@ static int type_compatible(Type *t1, Type *t2);
 /* 新增函数声明 */
 static void check_func_params(ASTNode *node, Type *return_type);
 static void check_func_param(ASTNode *node);
-
+static int check_assignment_compatible(Type *target, Type *source);
 /* ================== 工具函数 ================== */
 
 /* 本地错误处理 */
@@ -1052,14 +1052,29 @@ static void check_assign_expr(ASTNode *node, SemanticContext *ctx) {
     if (node->ptr[0]) check_expr(node->ptr[0], ctx);
     if (node->ptr[1]) check_expr(node->ptr[1], ctx);
     
+     /* 获取左右操作数的类型 */
+    Type *left_type = node->ptr[0] ? node->ptr[0]->type_info : NULL;
+    Type *right_type = node->ptr[1] ? node->ptr[1]->type_info : NULL;
+
     /* 左值检查 */
     if (node->ptr[0] && !node->ptr[0]->is_lvalue) {
         local_semantic_error(node->ptr[0]->pos, 0, ERR_NOT_LVALUE, 
                            "left side of assignment must be lvalue");
     }
     
-    /* 类型检查 - 简化版 */
-    node->type_info = new_basic_type(TYPE_INT);
+    /* 类型兼容性检查 - 使用专门的赋值兼容性检查 */
+    if (!check_assignment_compatible(left_type, right_type)) {
+        /* 转换为字符串以便显示错误信息 */
+        const char *left_type_str = type_to_string(left_type);
+        const char *right_type_str = type_to_string(right_type);
+        
+        local_semantic_error(node->pos, 0, ERR_ASSIGN_TYPE,
+                           "cannot assign %s to %s", 
+                           right_type_str, left_type_str);
+    }
+    
+    /* 赋值表达式的类型是左操作数的类型 */
+    node->type_info = copy_type(left_type);
     node->is_lvalue = 0;
 }
 
@@ -1219,4 +1234,42 @@ static void check_func_param(ASTNode *node) {
     }
     
     free_type(param_type);  // 释放原始类型
+}
+
+/* 检查赋值兼容性 */
+static int check_assignment_compatible(Type *target, Type *source) {
+    if (!target || !source) return 0;
+    
+    printf("[DEBUG] check_assignment_compatible: target kind=%d, source kind=%d\n", 
+           target->kind, source->kind);
+    
+    /* 如果类型完全相同 */
+    if (type_equal(target, source)) {
+        printf("[DEBUG] check_assignment_compatible: types are equal\n");
+        return 1;
+    }
+    
+    /* 如果都是基本类型 */
+    if (target->kind == TK_BASIC && source->kind == TK_BASIC) {
+        printf("[DEBUG] check_assignment_compatible: target basic=%d, source basic=%d\n", 
+               target->basic, source->basic);
+        
+        /* 严格的C语言规则：int和float不能隐式转换 */
+        if (target->basic == source->basic) {
+            return 1;  // 相同类型，兼容
+        }
+        
+        /* 可以添加一些隐式转换规则，例如：
+         * - int可以赋值给float
+         * - char可以赋值给int
+         * 但float不能赋值给int（需要显式转换）
+         */
+        
+        /* 这里使用严格规则：必须类型相同 */
+        return 0;
+    }
+    
+    /* 其他类型的兼容性规则... */
+    
+    return 0;
 }

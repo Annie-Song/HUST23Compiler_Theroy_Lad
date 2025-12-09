@@ -4,13 +4,13 @@ int main() {
     //undefined_var = 10;
     
     // 错误2：重复定义
-    int x = 10;
-    int x = 20;          // 重复定义
+    //int x = 10;
+    //int x = 20;          // 重复定义
     
     // 错误3：类型不匹配
-    //int a = 10;
-    //float b = 3.14;
-    //a = b;               // 类型不匹配
+    int a = 10;
+    float b = 3.14;
+    a = b;               // 类型不匹配
     
     // 错误4：break不在循环中
     //break;
