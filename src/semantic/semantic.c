@@ -629,8 +629,15 @@ static void check_stmt(ASTNode *node, SemanticContext *ctx) {
     switch (node->kind) {
         case EXP_STMT:
             printf("[DEBUG] Found EXP_STMT\n");
-            if (node->ptr[0]) {
-                check_expr(node->ptr[0], ctx);
+             if (node->ptr[0]) {
+                // 首先检查是否为 DEF 节点
+                if (node->ptr[0]->kind == DEF) {
+                    // 如果是 DEF 节点，调用 check_def
+                    check_def(node->ptr[0], ctx);
+                } else {
+                    // 否则，作为普通表达式检查
+                    check_expr(node->ptr[0], ctx);
+                }
             }
             break;
             

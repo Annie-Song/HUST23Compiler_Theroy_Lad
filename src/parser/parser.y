@@ -251,11 +251,6 @@ stmt
     : local_def SEMI {  // 例如：int a = 0, b = 1;
         $$ = $1;
     }
-    // 添加变量声明语句
-    | def {
-        ASTNode *t = mknode(1, EXP_STMT, yylineno, $1);  // 将def包装为语句
-        $$ = t;
-    }
     | exp SEMI {
         ASTNode *t = mknode(1, EXP_STMT, yylineno, $1);
         $$ = t;
