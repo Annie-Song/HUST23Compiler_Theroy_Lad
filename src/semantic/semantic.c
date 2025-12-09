@@ -816,24 +816,55 @@ static void check_while_stmt(ASTNode *node, SemanticContext *ctx) {
     ctx->in_loop = saved_in_loop;
 }
 
-/* 检查for语句 */
+/* 检查for语句 - 修复版本 */
 static void check_for_stmt(ASTNode *node, SemanticContext *ctx) {
     if (!node || !ctx) return;
     
     int saved_in_loop = ctx->in_loop;
     ctx->in_loop = 1;
     
-    for (int i = 0; i < 4; i++) {
-        if (node->ptr[i]) {
-            if (i == 3) {
-                check_stmt(node->ptr[i], ctx);
-            } else {
-                check_expr(node->ptr[i], ctx);
-            }
-        }
+    printf("[DEBUG] check_for_stmt: entering FOR loop at line %d\n", node->pos);
+    
+    /* ===== 重要修复：为for循环创建新的作用域 ===== */
+    /* for循环的初始化部分可能包含变量声明（如 int j = 0）*/
+    enter_scope(symbol_table, "for_loop");
+    
+    /* 处理初始化部分（可能包含变量声明）*/
+    if (node->ptr[0]) {
+        printf("[DEBUG] check_for_stmt: checking init part\n");
+        /* 检查初始化表达式 - 可能是DEF或EXP_STMT */
+        check_expr(node->ptr[0], ctx);
     }
     
+    /* 处理条件部分 */
+    if (node->ptr[1]) {
+        printf("[DEBUG] check_for_stmt: checking condition part\n");
+        Type *cond_type = get_expr_type(node->ptr[1], ctx);
+        /* 条件应为布尔类型 */
+        if (cond_type && cond_type->kind != TK_BASIC) {
+            local_semantic_error(node->ptr[1]->pos, 0, ERR_TYPE_MISMATCH,
+                               "Condition must be boolean expression");
+        }
+        free_type(cond_type);
+    }
+    
+    /* 处理更新部分 */
+    if (node->ptr[2]) {
+        printf("[DEBUG] check_for_stmt: checking update part\n");
+        check_expr(node->ptr[2], ctx);
+    }
+    
+    /* 处理循环体 */
+    if (node->ptr[3]) {
+        printf("[DEBUG] check_for_stmt: checking loop body\n");
+        check_stmt(node->ptr[3], ctx);
+    }
+    
+    /* ===== 重要修复：退出for循环作用域 ===== */
+    exit_scope(symbol_table);
+    
     ctx->in_loop = saved_in_loop;
+    printf("[DEBUG] check_for_stmt: exiting FOR loop\n");
 }
 
 /* 检查break语句 */
@@ -864,6 +895,13 @@ static void check_expr(ASTNode *node, SemanticContext *ctx) {
     if (node->type_info) return;
     
     switch (node->kind) {
+        case DEF:  /* 新增：处理定义表达式 */
+            printf("[DEBUG] check_expr: found DEF node, calling check_def\n");
+            check_def(node, ctx);
+            node->type_info = new_basic_type(TYPE_INT);  /* 定义表达式返回int */
+            node->is_lvalue = 0;
+            break;
+
         case ID_NODE:
             check_id_expr(node, ctx);
             break;
