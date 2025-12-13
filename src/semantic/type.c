@@ -112,12 +112,12 @@ Type *new_struct_type(const char *name, FieldList *fields) {
 
 /* 复制类型 */
 Type *copy_type(Type *src) {
-     if (!src) {
+    if (!src) {
         printf("[DEBUG] copy_type: src is NULL\n");
         return NULL;
     }
     
-     /* 检查 src 是否看起来像有效的 Type 结构 */
+    /* 检查 src 是否看起来像有效的 Type 结构 */
     if (src->kind < 0 || src->kind > 3) {
         printf("[DEBUG] copy_type: WARNING: src has invalid kind=%d, returning NULL\n", src->kind);
         return NULL;
@@ -151,12 +151,28 @@ Type *copy_type(Type *src) {
             
         case TK_FUNCTION:
             printf("[DEBUG] copy_type: copying FUNCTION type\n");
+            /* 复制返回类型 */
             dst->func.return_type = copy_type(src->func.return_type);
             dst->func.param_count = src->func.param_count;
+            
+            /* 复制参数类型数组 */
             if (src->func.param_types && src->func.param_count > 0) {
                 dst->func.param_types = (Type **)malloc(src->func.param_count * sizeof(Type *));
+                if (!dst->func.param_types) {
+                    free(dst);
+                    return NULL;
+                }
                 for (int i = 0; i < src->func.param_count; i++) {
                     dst->func.param_types[i] = copy_type(src->func.param_types[i]);
+                    if (!dst->func.param_types[i]) {
+                        /* 复制失败，清理已分配的内存 */
+                        for (int j = 0; j < i; j++) {
+                            free_type(dst->func.param_types[j]);
+                        }
+                        free(dst->func.param_types);
+                        free(dst);
+                        return NULL;
+                    }
                 }
             } else {
                 dst->func.param_types = NULL;

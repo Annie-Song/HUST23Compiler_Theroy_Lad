@@ -63,13 +63,32 @@ Operand *new_var_operand(SymbolEntry *sym) {
 
 Operand *new_temp_operand(Type *type) {
     Operand *op = (Operand *)malloc(sizeof(Operand));
-    if (!op) return NULL;
+    if (!op) {
+        printf("[ERROR] Failed to allocate memory for temp operand\n");
+        return NULL;
+    }
     
     op->kind = OP_VAR;
     char name[32];
     snprintf(name, sizeof(name), "t%d", temp_counter++);
     op->name = strdup(name);
-    op->type = copy_type(type);
+    
+    /* 检查类型是否有效 */
+    if (!type) {
+        printf("[WARNING] Temp operand type is NULL, using int\n");
+        op->type = new_basic_type(TYPE_INT);
+    } else if (type->kind == TK_FUNCTION) {
+        /* 函数类型不能用作临时变量的类型，使用int作为默认类型 */
+        printf("[WARNING] Attempt to create temp operand with function type, using int instead\n");
+        op->type = new_basic_type(TYPE_INT);
+    } else {
+        op->type = copy_type(type);
+        if (!op->type) {
+            printf("[WARNING] Failed to copy type for temp operand, using int\n");
+            op->type = new_basic_type(TYPE_INT);
+        }
+    }
+    
     op->offset = 0;
     return op;
 }
@@ -420,8 +439,15 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
             
         case COMP_ST:
             printf("[IR DEBUG] Processing COMP_ST statement\n");
-            if (node->ptr[1]) {
-                gen_ir_stmt(node->ptr[1], ir_list, next_label);
+            printf("[IR DEBUG] COMP_ST has child at ptr[0], kind = %d\n", 
+                   node->ptr[0] ? node->ptr[0]->kind : -1);
+            
+            // 根据AST输出，语句在 ptr[0] 中（是 STMT_LIST）
+            if (node->ptr[0]) {
+                printf("[IR DEBUG] COMP_ST child is STMT_LIST, generating statements\n");
+                gen_ir_stmt(node->ptr[0], ir_list, next_label);
+            } else {
+                printf("[IR DEBUG] COMP_ST has no child\n");
             }
             break;
             
@@ -473,8 +499,22 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
             
         case STMT_LIST:
             printf("[IR DEBUG] Processing STMT_LIST\n");
-            if (node->ptr[0]) gen_ir_stmt(node->ptr[0], ir_list, next_label);
-            if (node->ptr[1]) gen_ir_stmt(node->ptr[1], ir_list, next_label);
+            printf("[IR DEBUG] STMT_LIST ptr[0] = %p, ptr[1] = %p\n", 
+                   (void*)node->ptr[0], (void*)node->ptr[1]);
+            
+            // 处理第一个语句
+            if (node->ptr[0]) {
+                printf("[IR DEBUG] Processing first statement in STMT_LIST\n");
+                gen_ir_stmt(node->ptr[0], ir_list, next_label);
+            }
+            
+            // 递归处理剩余的语句列表
+            if (node->ptr[1]) {
+                printf("[IR DEBUG] Processing remaining statements in STMT_LIST\n");
+                gen_ir_stmt(node->ptr[1], ir_list, next_label);
+            } else {
+                printf("[IR DEBUG] No more statements in STMT_LIST\n");
+            }
             break;
             
         default:
@@ -588,21 +628,56 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result) {
 static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) {
     if (!node || !ir_list || !result) return;
     
+    printf("[DEBUG] Generating binary expression, op: %s\n", node->type_id ? node->type_id : "unknown");
+    
     ASTNode *left = node->ptr[0];
     ASTNode *right = node->ptr[1];
     
-    if (!left || !right) return;
+    if (!left || !right) {
+        printf("[ERROR] Binary expression missing left or right operand\n");
+        return;
+    }
     
     // 为左右操作数生成临时变量
     Type *left_type = left->type_info;
     Type *right_type = right->type_info;
-    if (!left_type) left_type = new_basic_type(TYPE_INT);
-    if (!right_type) right_type = new_basic_type(TYPE_INT);
+    
+    /* 调试信息 */
+    if (left_type) {
+        printf("[DEBUG] Left type: kind=%d\n", left_type->kind);
+    } else {
+        printf("[DEBUG] Left type is NULL\n");
+    }
+    if (right_type) {
+        printf("[DEBUG] Right type: kind=%d\n", right_type->kind);
+    } else {
+        printf("[DEBUG] Right type is NULL\n");
+    }
+    
+    /* 确保类型不是函数类型 */
+    if (!left_type) {
+        left_type = new_basic_type(TYPE_INT);
+        printf("[DEBUG] Using int as left type (was NULL)\n");
+    } else if (left_type->kind == TK_FUNCTION) {
+        printf("[WARNING] Left operand has function type, using int instead\n");
+        left_type = new_basic_type(TYPE_INT);
+    }
+    
+    if (!right_type) {
+        right_type = new_basic_type(TYPE_INT);
+        printf("[DEBUG] Using int as right type (was NULL)\n");
+    } else if (right_type->kind == TK_FUNCTION) {
+        printf("[WARNING] Right operand has function type, using int instead\n");
+        right_type = new_basic_type(TYPE_INT);
+    }
     
     Operand *left_temp = new_temp_operand(left_type);
     Operand *right_temp = new_temp_operand(right_type);
     
-    if (!left_temp || !right_temp) return;
+    if (!left_temp || !right_temp) {
+        printf("[ERROR] Failed to create temp operands for binary expression\n");
+        return;
+    }
     
     // 生成左右操作数的代码
     gen_ir_expr(left, ir_list, left_temp);
@@ -617,14 +692,21 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) 
         else if (strcmp(op_str, "-") == 0) op_code = IR_SUB;
         else if (strcmp(op_str, "*") == 0) op_code = IR_MUL;
         else if (strcmp(op_str, "/") == 0) op_code = IR_DIV;
-        else op_code = IR_ADD;  // 默认使用加法
+        else {
+            printf("[WARNING] Unknown binary operator: %s, using ADD\n", op_str);
+            op_code = IR_ADD;
+        }
     } else {
+        printf("[WARNING] Binary operator is NULL, using ADD\n");
         op_code = IR_ADD;
     }
     
     IRCode *binary_code = new_ir_code(op_code, left_temp, right_temp, result);
     if (binary_code) {
         append_ir_code(ir_list, binary_code);
+        printf("[DEBUG] Created binary IR code: %s\n", op_str ? op_str : "unknown");
+    } else {
+        printf("[ERROR] Failed to create binary IR code\n");
     }
 }
 
