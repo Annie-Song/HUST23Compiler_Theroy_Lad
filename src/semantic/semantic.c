@@ -30,7 +30,7 @@ typedef struct {
 
 /* ================== 全局变量 ================== */
 
-static SymbolTable *symbol_table = NULL;
+SymbolTable *symbol_table = NULL;
 
 /* ================== 内部函数声明 ================== */
 
@@ -184,11 +184,6 @@ void semantic_analysis(ASTNode *root) {
     /* 打印所有错误 */
     print_all_errors();
     
-    /* 清理 */
-    if (symbol_table) {
-        destroy_symbol_table(symbol_table);
-        symbol_table = NULL;
-    }
     
     if (!has_errors()) {
         printf("\n✓ Semantic analysis passed!\n");

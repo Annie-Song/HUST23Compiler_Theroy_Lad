@@ -12,17 +12,17 @@ static int temp_counter = 1;
 static int label_counter = 1;
 
 /* ================== 函数声明 ================== */
-static void gen_ir_func_def(ASTNode *node, IRList *ir_list);
+static void gen_ir_func_def(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_params(ASTNode *node, IRList *ir_list);
-static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label);
-static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result);
-static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result);
-static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result);
-static void gen_ir_func_call(ASTNode *node, IRList *ir_list, Operand *result);
-static void gen_ir_args(ASTNode *node, IRList *ir_list);
-static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label);
-static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label);
-static void gen_ir_init_dec(ASTNode *node, IRList *ir_list);  
+static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab);
+static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab);
+static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab);
+static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab);
+static void gen_ir_func_call(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab);
+static void gen_ir_args(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
+static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab);
+static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab);
+static void gen_ir_init_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);  
 
 /* ================== 操作数创建函数 ================== */
 
@@ -63,10 +63,7 @@ Operand *new_var_operand(SymbolEntry *sym) {
 
 Operand *new_temp_operand(Type *type) {
     Operand *op = (Operand *)malloc(sizeof(Operand));
-    if (!op) {
-        printf("[ERROR] Failed to allocate memory for temp operand\n");
-        return NULL;
-    }
+    if (!op) return NULL;
     
     op->kind = OP_VAR;
     char name[32];
@@ -298,23 +295,23 @@ void print_ir_list(IRList *list) {
 
 /* ================== 中间代码生成主函数 ================== */
 
-IRList *gen_ir_from_ast(ASTNode *node) {
+IRList *gen_ir_from_ast(ASTNode *node, SymbolTable *symtab) {
     if (!node) return NULL;
     
     IRList *ir_list = new_ir_list();
     if (!ir_list) return NULL;
     
-    gen_ir_program(node, ir_list);
+    gen_ir_program(node, ir_list, symtab);
     return ir_list;
 }
 
-void gen_ir_program(ASTNode *node, IRList *ir_list) {
+void gen_ir_program(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || !ir_list) return;
     
     switch (node->kind) {
         case EXT_DEF_LIST:
-            if (node->ptr[0]) gen_ir_program(node->ptr[0], ir_list);
-            if (node->ptr[1]) gen_ir_program(node->ptr[1], ir_list);
+            if (node->ptr[0]) gen_ir_program(node->ptr[0], ir_list, symtab);
+            if (node->ptr[1]) gen_ir_program(node->ptr[1], ir_list, symtab);
             break;
             
         case EXT_VAR_DEF:
@@ -322,19 +319,19 @@ void gen_ir_program(ASTNode *node, IRList *ir_list) {
             break;
             
         case FUNC_DEF:
-            gen_ir_func_def(node, ir_list);
+            gen_ir_func_def(node, ir_list, symtab);
             break;
             
         default:
             for (int i = 0; i < 4; i++) {
-                if (node->ptr[i]) gen_ir_program(node->ptr[i], ir_list);
+                if (node->ptr[i]) gen_ir_program(node->ptr[i], ir_list, symtab);
             }
             break;
     }
 }
 
 /* 生成函数定义的中间代码 */
-static void gen_ir_func_def(ASTNode *node, IRList *ir_list) {
+static void gen_ir_func_def(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || node->kind != FUNC_DEF || !ir_list) return;
     
     ASTNode *func_dec = node->ptr[1];
@@ -366,7 +363,7 @@ static void gen_ir_func_def(ASTNode *node, IRList *ir_list) {
     // 生成函数体
     ASTNode *func_body = node->ptr[2];
     if (func_body) {
-        gen_ir_stmt(func_body, ir_list, NULL);
+        gen_ir_stmt(func_body, ir_list, NULL, symtab);
     }
 }
 
@@ -418,7 +415,7 @@ static void gen_ir_params(ASTNode *node, IRList *ir_list) {
 }
 
 /* 生成语句的中间代码 */
-static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
+static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab) {
     if (!node || !ir_list) return;
     
     printf("[IR DEBUG] Generating IR for statement kind: %d\n", node->kind);
@@ -432,7 +429,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
                 ASTNode *dec_list = node->ptr[1];
                 if (dec_list && dec_list->kind == INIT_DEC) {
                     // 处理初始化的声明
-                    gen_ir_init_dec(dec_list, ir_list);
+                    gen_ir_init_dec(dec_list, ir_list, symtab);
                 }
             }
             break;
@@ -445,7 +442,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
             // 根据AST输出，语句在 ptr[0] 中（是 STMT_LIST）
             if (node->ptr[0]) {
                 printf("[IR DEBUG] COMP_ST child is STMT_LIST, generating statements\n");
-                gen_ir_stmt(node->ptr[0], ir_list, next_label);
+                gen_ir_stmt(node->ptr[0], ir_list, next_label, symtab);
             } else {
                 printf("[IR DEBUG] COMP_ST has no child\n");
             }
@@ -459,7 +456,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
                 
                 Operand *temp_result = new_temp_operand(expr_type);
                 if (temp_result) {
-                    gen_ir_expr(node->ptr[0], ir_list, temp_result);
+                    gen_ir_expr(node->ptr[0], ir_list, temp_result, symtab);
                 }
             }
             break;
@@ -472,7 +469,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
                 
                 Operand *ret_val = new_temp_operand(expr_type);
                 if (ret_val) {
-                    gen_ir_expr(node->ptr[0], ir_list, ret_val);
+                    gen_ir_expr(node->ptr[0], ir_list, ret_val, symtab);
                     
                     IRCode *ret_code = new_ir_code(IR_RETURN, ret_val, NULL, NULL);
                     if (ret_code) {
@@ -489,12 +486,12 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
             
         case IF_STMT:
             printf("[IR DEBUG] Processing IF_STMT\n");
-            gen_ir_if_stmt(node, ir_list, next_label);
+            gen_ir_if_stmt(node, ir_list, next_label, symtab);
             break;
             
         case WHILE_STMT:
             printf("[IR DEBUG] Processing WHILE_STMT\n");
-            gen_ir_while_stmt(node, ir_list, next_label);
+            gen_ir_while_stmt(node, ir_list, next_label, symtab);
             break;
             
         case STMT_LIST:
@@ -505,13 +502,13 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
             // 处理第一个语句
             if (node->ptr[0]) {
                 printf("[IR DEBUG] Processing first statement in STMT_LIST\n");
-                gen_ir_stmt(node->ptr[0], ir_list, next_label);
+                gen_ir_stmt(node->ptr[0], ir_list, next_label, symtab);
             }
             
             // 递归处理剩余的语句列表
             if (node->ptr[1]) {
                 printf("[IR DEBUG] Processing remaining statements in STMT_LIST\n");
-                gen_ir_stmt(node->ptr[1], ir_list, next_label);
+                gen_ir_stmt(node->ptr[1], ir_list, next_label, symtab);
             } else {
                 printf("[IR DEBUG] No more statements in STMT_LIST\n");
             }
@@ -524,7 +521,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
 }
 
 /* 生成初始化声明的中间代码 */
-static void gen_ir_init_dec(ASTNode *node, IRList *ir_list) {
+static void gen_ir_init_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || node->kind != INIT_DEC || !ir_list) return;
     
     printf("[IR DEBUG] Processing INIT_DEC\n");
@@ -541,7 +538,7 @@ static void gen_ir_init_dec(ASTNode *node, IRList *ir_list) {
     Operand *init_temp = new_temp_operand(init_type);
     if (!init_temp) return;
     
-    gen_ir_expr(init_expr, ir_list, init_temp);
+    gen_ir_expr(init_expr, ir_list, init_temp, symtab);
     
     // 如果是变量定义，将初始化值赋给变量
     if (var_node->kind == ID_NODE && var_node->symbol_ref) {
@@ -556,13 +553,18 @@ static void gen_ir_init_dec(ASTNode *node, IRList *ir_list) {
 }
 
 /* 生成表达式的中间代码 */
-static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result) {
+static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
     if (!node || !ir_list || !result) return;
+    
+    printf("[IR DEBUG] gen_ir_expr for node kind=%d\n", node->kind);
     
     switch (node->kind) {
         case ID_NODE:
-            // 标识符：生成赋值指令
+            printf("[IR DEBUG] Processing identifier: %s\n", node->type_id ? node->type_id : "NULL");
+            
+            // 如果已有 symbol_ref，使用它
             if (node->symbol_ref) {
+                printf("[IR DEBUG] Using existing symbol_ref\n");
                 Operand *var_op = new_var_operand(node->symbol_ref);
                 if (var_op) {
                     IRCode *assign_code = new_ir_code(IR_ASSIGN, var_op, NULL, result);
@@ -571,12 +573,39 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result) {
                     }
                 }
             } else {
-                // 如果找不到符号，使用默认值
-                Operand *const_op = new_const_operand_int(0);
-                if (const_op) {
-                    IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
-                    if (assign_code) {
-                        append_ir_code(ir_list, assign_code);
+                // 如果 symbol_ref 为 NULL，尝试从符号表查找
+                printf("[IR DEBUG] Symbol ref is NULL, looking up symbol: %s\n", node->type_id);
+                if (symtab) {
+                    SymbolEntry *sym = lookup_symbol(symtab, node->type_id);
+                    if (sym) {
+                        printf("[IR DEBUG] Found symbol in symbol table\n");
+                        node->symbol_ref = sym;  // 链接到符号表条目
+                        Operand *var_op = new_var_operand(sym);
+                        if (var_op) {
+                            IRCode *assign_code = new_ir_code(IR_ASSIGN, var_op, NULL, result);
+                            if (assign_code) {
+                                append_ir_code(ir_list, assign_code);
+                            }
+                        }
+                    } else {
+                        printf("[ERROR] Identifier node has no symbol reference and not found in symbol table: %s\n", node->type_id);
+                        // 如果找不到符号，使用默认值
+                        Operand *const_op = new_const_operand_int(0);
+                        if (const_op) {
+                            IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
+                            if (assign_code) {
+                                append_ir_code(ir_list, assign_code);
+                            }
+                        }
+                    }
+                } else {
+                    printf("[ERROR] Symbol table is NULL for identifier: %s\n", node->type_id);
+                    Operand *const_op = new_const_operand_int(0);
+                    if (const_op) {
+                        IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
+                        if (assign_code) {
+                            append_ir_code(ir_list, assign_code);
+                        }
                     }
                 }
             }
@@ -607,15 +636,15 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result) {
             break;
             
         case BINARY_EXP:
-            gen_ir_binary_expr(node, ir_list, result);
+            gen_ir_binary_expr(node, ir_list, result, symtab);
             break;
             
         case ASSIGN_EXP:
-            gen_ir_assign_expr(node, ir_list, result);
+            gen_ir_assign_expr(node, ir_list, result, symtab);
             break;
             
         case FUNC_CALL:
-            gen_ir_func_call(node, ir_list, result);
+            gen_ir_func_call(node, ir_list, result, symtab);
             break;
             
         default:
@@ -625,7 +654,7 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result) {
 }
 
 /* 生成二元表达式的中间代码 */
-static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) {
+static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
     if (!node || !ir_list || !result) return;
     
     printf("[DEBUG] Generating binary expression, op: %s\n", node->type_id ? node->type_id : "unknown");
@@ -633,10 +662,7 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) 
     ASTNode *left = node->ptr[0];
     ASTNode *right = node->ptr[1];
     
-    if (!left || !right) {
-        printf("[ERROR] Binary expression missing left or right operand\n");
-        return;
-    }
+    if (!left || !right) return;
     
     // 为左右操作数生成临时变量
     Type *left_type = left->type_info;
@@ -645,13 +671,9 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) 
     /* 调试信息 */
     if (left_type) {
         printf("[DEBUG] Left type: kind=%d\n", left_type->kind);
-    } else {
-        printf("[DEBUG] Left type is NULL\n");
     }
     if (right_type) {
         printf("[DEBUG] Right type: kind=%d\n", right_type->kind);
-    } else {
-        printf("[DEBUG] Right type is NULL\n");
     }
     
     /* 确保类型不是函数类型 */
@@ -680,8 +702,8 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) 
     }
     
     // 生成左右操作数的代码
-    gen_ir_expr(left, ir_list, left_temp);
-    gen_ir_expr(right, ir_list, right_temp);
+    gen_ir_expr(left, ir_list, left_temp, symtab);
+    gen_ir_expr(right, ir_list, right_temp, symtab);
     
     // 根据操作符生成相应的中间代码
     IROpCode op_code;
@@ -711,7 +733,7 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result) 
 }
 
 /* 生成赋值表达式的中间代码 */
-static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result) {
+static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
     if (!node || !ir_list || !result) return;
     
     ASTNode *left = node->ptr[0];
@@ -726,7 +748,7 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result) 
     Operand *right_temp = new_temp_operand(right_type);
     if (!right_temp) return;
     
-    gen_ir_expr(right, ir_list, right_temp);
+    gen_ir_expr(right, ir_list, right_temp, symtab);
     
     // 如果是变量赋值
     if (left->symbol_ref) {
@@ -753,73 +775,132 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result) 
 }
 
 /* 生成函数调用的中间代码 */
-static void gen_ir_func_call(ASTNode *node, IRList *ir_list, Operand *result) {
+static void gen_ir_func_call(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
     if (!node || !ir_list) return;
     
     ASTNode *func_name_node = node->ptr[0];
     ASTNode *args_node = node->ptr[1];
     
-    if (!func_name_node || func_name_node->kind != ID_NODE) return;
+    if (!func_name_node || func_name_node->kind != ID_NODE) {
+        printf("[ERROR] Invalid function call node\n");
+        return;
+    }
     
     char *func_name = func_name_node->type_id;
-    if (!func_name) return;
+    if (!func_name) {
+        printf("[ERROR] Function name is NULL\n");
+        return;
+    }
+    
+    printf("[IR DEBUG] Generating function call to %s\n", func_name);
     
     // 生成实参的代码
     if (args_node) {
-        gen_ir_args(args_node, ir_list);
+        printf("[IR DEBUG] Generating arguments for function call\n");
+        gen_ir_args(args_node, ir_list, symtab);
+    } else {
+        printf("[IR DEBUG] No arguments for function call\n");
     }
     
     // 生成CALL指令
     Operand *func_op = (Operand *)malloc(sizeof(Operand));
-    if (!func_op) return;
+    if (!func_op) {
+        printf("[ERROR] Failed to create function operand\n");
+        return;
+    }
     
     func_op->kind = OP_FUNC;
     func_op->name = strdup(func_name);
     
     // 假设函数有返回值
     if (result) {
+        printf("[IR DEBUG] Creating CALL with result %s\n", result->name);
         IRCode *call_code = new_ir_code(IR_CALL, func_op, NULL, result);
         if (call_code) {
             append_ir_code(ir_list, call_code);
+        } else {
+            printf("[ERROR] Failed to create CALL instruction\n");
         }
     } else {
+        printf("[IR DEBUG] Creating CALL without result\n");
         IRCode *call_code = new_ir_code(IR_CALL_VOID, func_op, NULL, NULL);
         if (call_code) {
             append_ir_code(ir_list, call_code);
+        } else {
+            printf("[ERROR] Failed to create CALL_VOID instruction\n");
         }
     }
 }
 
 /* 生成实参的中间代码 */
-static void gen_ir_args(ASTNode *node, IRList *ir_list) {
+static void gen_ir_args(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || !ir_list) return;
+    
+    printf("[IR DEBUG] Generating args, node kind=%d\n", node->kind);
     
     if (node->kind == ARGS) {
         if (node->ptr[0]) {
+            printf("[IR DEBUG] Processing argument at ptr[0], kind=%d\n", node->ptr[0]->kind);
+            
             // 为实参表达式生成临时变量
             Type *arg_type = node->ptr[0]->type_info;
-            if (!arg_type) arg_type = new_basic_type(TYPE_INT);
+            
+            // 如果类型信息为NULL，尝试从节点获取或使用默认
+            if (!arg_type) {
+                // 如果是标识符，尝试从符号表获取类型
+                if (node->ptr[0]->kind == ID_NODE && symtab) {
+                    printf("[IR DEBUG] Argument is identifier, looking up in symbol table\n");
+                    SymbolEntry *sym = lookup_symbol(symtab, node->ptr[0]->type_id);
+                    if (sym && sym->type) {
+                        arg_type = sym->type;
+                        printf("[IR DEBUG] Found type from symbol table: kind=%d\n", arg_type->kind);
+                        // 更新节点的类型信息
+                        node->ptr[0]->type_info = copy_type(arg_type);
+                        node->ptr[0]->symbol_ref = sym;
+                    } else {
+                        printf("[IR DEBUG] Symbol not found, using int\n");
+                        arg_type = new_basic_type(TYPE_INT);
+                    }
+                } else {
+                    printf("[IR DEBUG] Argument type is NULL, using int\n");
+                    arg_type = new_basic_type(TYPE_INT);
+                }
+            } else {
+                printf("[IR DEBUG] Argument type kind=%d\n", arg_type->kind);
+            }
             
             Operand *arg_temp = new_temp_operand(arg_type);
             if (arg_temp) {
-                gen_ir_expr(node->ptr[0], ir_list, arg_temp);
+                printf("[IR DEBUG] Generated temp operand for argument: %s\n", arg_temp->name);
                 
+                // 生成参数表达式的IR代码
+                gen_ir_expr(node->ptr[0], ir_list, arg_temp, symtab);
+                
+                // 生成ARG指令
                 IRCode *arg_code = new_ir_code(IR_ARG, arg_temp, NULL, NULL);
                 if (arg_code) {
+                    printf("[IR DEBUG] Created ARG instruction for %s\n", arg_temp->name);
                     append_ir_code(ir_list, arg_code);
                 }
+            } else {
+                printf("[ERROR] Failed to create temp operand for argument\n");
             }
         }
         
         // 递归处理剩余实参
         if (node->ptr[1]) {
-            gen_ir_args(node->ptr[1], ir_list);
+            printf("[IR DEBUG] Processing next argument\n");
+            gen_ir_args(node->ptr[1], ir_list, symtab);
+        } else {
+            printf("[IR DEBUG] No more arguments\n");
         }
+    } else {
+        printf("[ERROR] Expected ARGS node, got kind=%d\n", node->kind);
     }
 }
 
 /* 生成if语句的中间代码 */
-static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
+static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab) {
     if (!node || node->kind != IF_STMT || !ir_list) return;
     
     ASTNode *cond = node->ptr[0];
@@ -834,7 +915,7 @@ static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
     Operand *cond_temp = new_temp_operand(cond_type);
     if (!cond_temp) return;
     
-    gen_ir_expr(cond, ir_list, cond_temp);
+    gen_ir_expr(cond, ir_list, cond_temp, symtab);
     
     // 生成标签
     Operand *then_label = new_label_operand();
@@ -861,7 +942,7 @@ static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
     }
     
     // 生成then语句
-    gen_ir_stmt(then_stmt, ir_list, NULL);
+    gen_ir_stmt(then_stmt, ir_list, NULL, symtab);
     
     // 生成结束标签
     IRCode *label_end = new_ir_code(IR_LABEL, NULL, NULL, end_label);
@@ -871,7 +952,7 @@ static void gen_ir_if_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
 }
 
 /* 生成while语句的中间代码 */
-static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label) {
+static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab) {
     if (!node || node->kind != WHILE_STMT || !ir_list) return;
     
     ASTNode *cond = node->ptr[0];
@@ -899,7 +980,7 @@ static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label) 
     Operand *cond_temp = new_temp_operand(cond_type);
     if (!cond_temp) return;
     
-    gen_ir_expr(cond, ir_list, cond_temp);
+    gen_ir_expr(cond, ir_list, cond_temp, symtab);
     
     // 条件跳转到循环体
     IRCode *if_code = new_ir_code(IR_IF, cond_temp, NULL, body_label);
@@ -920,7 +1001,7 @@ static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label) 
     }
     
     // 生成循环体
-    gen_ir_stmt(body, ir_list, NULL);
+    gen_ir_stmt(body, ir_list, NULL, symtab);
     
     // 跳回测试
     IRCode *goto_test = new_ir_code(IR_GOTO, NULL, NULL, test_label);

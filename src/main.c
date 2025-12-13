@@ -64,26 +64,22 @@ int main(int argc, char *argv[]) {
             printf("\n=== Phase 3: Intermediate Code Generation ===\n");
             
             if (root) {
-                // 生成中间代码
-                IRList *ir_list = gen_ir_from_ast(root);
-                
-                if (ir_list && ir_list->head) {
-                    // 显示中间代码
-                    print_ir_list(ir_list);
+                // 生成中间代码 - 现在需要符号表
+                // 注意：symbol_table 应该在 semantic_analysis 中初始化
+                if (symbol_table) {
+                    IRList *ir_list = gen_ir_from_ast(root, symbol_table);
                     
-                    // 保存中间代码到文件（可选）
-                    // FILE *ir_file = fopen("output.ir", "w");
-                    // if (ir_file) {
-                    //     // 遍历并写入文件
-                    //     IRCode *current = ir_list->head;
-                    //     while (current) {
-                    //         // 这里需要实现写入函数
-                    //         current = current->next;
-                    //     }
-                    //     fclose(ir_file);
-                    // }
+                    if (ir_list && ir_list->head) {
+                        // 显示中间代码
+                        print_ir_list(ir_list);
+                        
+                        // TODO: 释放IR列表内存
+                        // free_ir_list(ir_list);
+                    } else {
+                        printf("No intermediate code generated.\n");
+                    }
                 } else {
-                    printf("No intermediate code generated.\n");
+                    printf("Symbol table is NULL, cannot generate intermediate code.\n");
                 }
             } else {
                 printf("AST is empty, cannot generate intermediate code.\n");
@@ -98,6 +94,12 @@ int main(int argc, char *argv[]) {
 
     } else {
         printf("\n✗ Parsing failed!\n");
+    }
+
+    // 程序结束时清理符号表
+    if (symbol_table) {
+        destroy_symbol_table(symbol_table);
+        symbol_table = NULL;
     }
     
     return result;
