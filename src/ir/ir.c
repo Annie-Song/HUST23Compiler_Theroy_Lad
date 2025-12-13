@@ -1439,7 +1439,7 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
     
     if (!left || !right) return;
     
-    // 处理右操作数值
+    // 为右操作数创建一个临时变量
     Type *right_type = right->type_info;
     if (!right_type) right_type = new_basic_type(TYPE_INT);
     
@@ -1449,17 +1449,18 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
         return;
     }
     
+    // 生成右操作数的值
     gen_ir_expr(right, ir_list, right_temp, symtab);
     
-    // 将结果赋给result（作为表达式的值）
+    // 将右操作数的值赋给结果（作为表达式的值）
     IRCode *assign_result = new_ir_code(IR_ASSIGN, right_temp, NULL, result);
     if (assign_result) {
         append_ir_code(ir_list, assign_result);
     }
     
-    // 检查左操作数类型并处理赋值
+    // 检查是否是数组赋值
     if (left->kind == ARRAY_ACCESS) {
-        // 数组元素赋值 - 使用新函数
+        // 数组元素赋值 - 直接使用右操作数的值
         printf("[IR DEBUG] Array element assignment using new function\n");
         gen_ir_array_store(left, right_temp, ir_list, symtab);
         
@@ -1511,15 +1512,6 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
             } else {
                 gen_ir_expr(left, ir_list, left_temp, symtab);
             }
-            
-            // 生成右操作数的值
-            Type *right_type = right->type_info;
-            if (!right_type) right_type = new_basic_type(TYPE_INT);
-            
-            Operand *right_temp = new_temp_operand(right_type);
-            if (!right_temp) return;
-            
-            gen_ir_expr(right, ir_list, right_temp, symtab);
             
             // 执行运算
             if (strcmp(op, "%=") == 0) {
@@ -2371,47 +2363,29 @@ static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_l
             }
         } else if (base_array->kind == ARRAY_ACCESS) {
             // 多维数组：matrix[i][j] = value
-            // 首先获取内层数组的地址
+            // 需要获取内层数组的基址
             
-            // 为内层数组地址创建一个临时变量
-            // 使用正确的类型：应该是数组的基址类型
-            Type *temp_type = new_basic_type(TYPE_INT);  // 地址类型
+            // 首先为内层数组创建一个临时变量来存储其地址
+            Operand *inner_array_temp = new_temp_operand(new_basic_type(TYPE_INT));
+            if (!inner_array_temp) return;
             
-            Operand *base_addr_temp = new_temp_operand(temp_type);
-            if (!base_addr_temp) {
-                free_type(temp_type);
-                return;
-            }
-            
-            // 递归获取内层数组地址（这里应该是地址，而不是值）
-            // 我们需要修改 gen_ir_array_access 来支持获取地址
-            
-            // 临时解决方案：先获取值，然后再存储
-            // 为内层数组值创建一个临时变量
-            Type *element_type = new_basic_type(TYPE_INT);
-            Operand *inner_array_temp = new_temp_operand(element_type);
-            if (!inner_array_temp) {
-                free_type(temp_type);
-                free_type(element_type);
-                return;
-            }
-            
-            // 获取内层数组的值（这是一个地址）
+            // 递归获取内层数组的地址
+            // 这里的关键是：我们需要获取 matrix[i] 的值，它本身是一个数组的基址
             gen_ir_array_access(base_array, ir_list, inner_array_temp, symtab);
             
-            // 生成数组存储指令
-            // 我们需要创建一个数组操作数来表示内层数组
+            // 现在 inner_array_temp 包含了 matrix[i] 的地址
+            // 我们需要将其用作数组基址
+            
+            // 创建一个操作数来表示内层数组
             Operand *inner_array_op = (Operand *)calloc(1, sizeof(Operand));
             if (!inner_array_op) {
                 printf("[ERROR] Failed to allocate inner array operand\n");
-                free_type(temp_type);
-                free_type(element_type);
                 return;
             }
             
             inner_array_op->kind = OP_VAR;
             inner_array_op->name = strdup(inner_array_temp->name);
-            inner_array_op->type = copy_type(element_type);  // 应该是数组类型，简化使用基础类型
+            inner_array_op->type = copy_type(new_basic_type(TYPE_INT));
             inner_array_op->offset = 0;
             
             // 生成数组存储指令
@@ -2425,8 +2399,6 @@ static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_l
             // 清理
             free(inner_array_op->name);
             free(inner_array_op);
-            free_type(temp_type);
-            free_type(element_type);
             
         } else {
             printf("[ERROR] Unsupported array base type: %d\n", base_array->kind);
