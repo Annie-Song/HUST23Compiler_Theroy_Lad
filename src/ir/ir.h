@@ -36,6 +36,12 @@ typedef enum {
     IR_SUB,          /* 减法 */
     IR_MUL,          /* 乘法 */
     IR_DIV,          /* 除法 */
+    IR_LT,           /* 小于 */       // 新增
+    IR_LE,           /* 小于等于 */   // 新增
+    IR_GT,           /* 大于 */       // 新增
+    IR_GE,           /* 大于等于 */   // 新增
+    IR_EQ,           /* 等于 */       // 新增
+    IR_NE,           /* 不等于 */     // 新增
     IR_GOTO,         /* 无条件跳转 */
     IR_IF,           /* 条件跳转 */
     IR_RETURN,       /* 返回 */

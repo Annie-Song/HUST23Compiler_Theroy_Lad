@@ -120,6 +120,23 @@ Type *copy_type(Type *src) {
     /* 检查 src 是否看起来像有效的 Type 结构 */
     if (src->kind < 0 || src->kind > 3) {
         printf("[DEBUG] copy_type: WARNING: src has invalid kind=%d, returning NULL\n", src->kind);
+        
+        // 调试信息：打印更多类型信息
+        printf("[DEBUG] copy_type: type size=%d, align=%d\n", src->size, src->align);
+        
+        // 尝试修复：如果是基本类型但kind值错误
+        if (src->basic >= TYPE_VOID && src->basic <= TYPE_CHAR) {
+            printf("[DEBUG] copy_type: Attempting to fix: basic=%d, correcting kind to TK_BASIC\n", src->basic);
+            // 创建一个新的基本类型
+            Type *fixed = new_basic_type(src->basic);
+            if (fixed) {
+                fixed->size = src->size;
+                fixed->align = src->align;
+            }
+            return fixed;
+        }
+        
+        printf("[DEBUG] copy_type: Cannot fix, returning NULL\n");
         return NULL;
     }
     
