@@ -85,6 +85,7 @@ static void gen_ir_array_access(ASTNode *node, IRList *ir_list, Operand *result,
 static void gen_ir_dec_list(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_array_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
+static void gen_ir_compound_stmt(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 
 /* ================== 操作数创建函数 ================== */
 
@@ -539,9 +540,19 @@ void print_ir_code(IRCode *code) {
             break;
         case IR_ARRAY_ALLOC:
             printf("  ARRAY_ALLOC ");
-            print_operand(code->result);
+            // 安全检查
+            if (code->result && code->result->name) {
+                printf("%s", code->result->name);
+            } else {
+                printf("array");
+            }
             printf("[");
-            print_operand(code->op1);
+            // 安全检查
+            if (code->op1) {
+                print_operand(code->op1);
+            } else {
+                printf("?");
+            }
             printf("]\n");
             break;
             
@@ -766,15 +777,8 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, Symbol
             
         case COMP_ST:
             printf("[IR DEBUG] Processing COMP_ST statement\n");
-            printf("[IR DEBUG] COMP_ST has child at ptr[0], kind = %d\n", 
-                   node->ptr[0] ? node->ptr[0]->kind : -1);
-            
-            if (node->ptr[0]) {
-                printf("[IR DEBUG] COMP_ST child is STMT_LIST, generating statements\n");
-                gen_ir_stmt(node->ptr[0], ir_list, next_label, symtab);
-            } else {
-                printf("[IR DEBUG] COMP_ST has no child\n");
-            }
+            // 使用新的复合语句处理函数
+            gen_ir_compound_stmt(node, ir_list, symtab);
             break;
             
         case EXP_STMT:
@@ -833,7 +837,7 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, Symbol
             gen_ir_for_stmt(node, ir_list, next_label, symtab);
             break;
             
-                case BREAK_STMT:
+        case BREAK_STMT:
             printf("[IR DEBUG] Processing BREAK_STMT\n");
             if (loop_context && loop_context->break_label) {
                 // 生成跳转到break标签的指令
@@ -874,9 +878,12 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, Symbol
             printf("[IR DEBUG] STMT_LIST ptr[0] = %p, ptr[1] = %p\n", 
                    (void*)node->ptr[0], (void*)node->ptr[1]);
             
+            // 关键修复：确保所有语句都被处理
             if (node->ptr[0]) {
                 printf("[IR DEBUG] Processing first statement in STMT_LIST\n");
                 gen_ir_stmt(node->ptr[0], ir_list, next_label, symtab);
+            } else {
+                printf("[IR DEBUG] First statement in STMT_LIST is NULL\n");
             }
             
             if (node->ptr[1]) {
@@ -2218,7 +2225,12 @@ static void gen_ir_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
             
         case ID_NODE:
             printf("[IR DEBUG] Processing variable declaration: %s\n", node->type_id);
-            // 普通变量声明，如果没有初始化，不需要生成代码
+            // 普通变量声明，不需要生成代码
+            break;
+            
+        case INIT_DEC:
+            printf("[IR DEBUG] Processing INIT_DEC in dec\n");
+            gen_ir_init_dec(node, ir_list, symtab);
             break;
             
         default:
@@ -2226,82 +2238,79 @@ static void gen_ir_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
             break;
     }
 }
-
-/* 处理数组声明 */
+/* 处理数组声明 - 修复版本 */
 static void gen_ir_array_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || node->kind != ARRAY_DEC || !ir_list) return;
     
-    // 获取数组名
     ASTNode *array_name = node->ptr[0];
     ASTNode *array_size = node->ptr[1];
     
-    if (!array_name ) {
-        printf("[ERROR] Invalid array declaration\n");
-        return;
-    }
+    if (!array_name) return;
     
-     // 如果是多维数组，递归处理
+    printf("[IR DEBUG] Processing array declaration (ARRAY_DEC)\n");
+    
+    // 处理多维数组（递归处理内层数组）
     if (array_name->kind == ARRAY_DEC) {
-        printf("[IR DEBUG] Processing multi-dimensional array\n");
-        // 先递归处理内层数组
+        printf("[IR DEBUG] Recursing for multi-dimensional array\n");
         gen_ir_array_dec(array_name, ir_list, symtab);
-        
-        // 然后处理当前维度
-        if (array_name->kind == ID_NODE) {
-            printf("[IR DEBUG] Reached array name: %s\n", array_name->type_id);
-        }
     }
     
-    // 处理当前数组声明
+    // 如果已经处理过多维数组的内层，当前节点可能已经被处理过
     if (array_name->kind == ID_NODE) {
-        printf("[IR DEBUG] Array declaration: %s\n", array_name->type_id);
-    
-    // 关键修复：直接从节点的symbol_ref获取符号
-    SymbolEntry *array_sym = array_name->symbol_ref;
-    if (!array_sym) {
-            if (symtab) {
-                array_sym = lookup_symbol(symtab, array_name->type_id);
-            }
-            if (!array_sym) {
-                printf("[ERROR] Array symbol not found: %s\n", array_name->type_id);
-                return;
-            }
+        printf("[IR DEBUG] Found array name: %s\n", array_name->type_id);
+        
+        // 直接使用节点的symbol_ref
+        SymbolEntry *array_sym = array_name->symbol_ref;
+        if (!array_sym) {
+            printf("[ERROR] No symbol_ref for array %s\n", array_name->type_id);
+            // 不要返回，继续处理，让后续代码正常生成
+            return;
         }
-    
-    printf("[IR DEBUG] Found array symbol for %s, size=%d\n", 
-           array_name->type_id, array_sym->size);
-    
-    // 生成数组分配指令
-    // 创建数组操作数
-    Operand *array_op = (Operand *)malloc(sizeof(Operand));
-    if (!array_op) {
-        printf("[ERROR] Failed to create array operand\n");
-        return;
-    }
-    
-    array_op->kind = OP_VAR;
-    array_op->name = strdup(array_name->type_id);
-    array_op->type = copy_type(array_sym->type);
-    array_op->offset = array_sym->offset;
-    
-    // 创建大小操作数
-    int size = 1;
-    if (array_size && array_size->kind == INT_NODE) {
-        size = array_size->type_int;
-        printf("[IR DEBUG] Array dimension size: %d\n", size);
-    }
-    
-    Operand *size_op = new_const_operand_int(size);
-    
-    // 生成ARRAY_ALLOC指令
-    IRCode *alloc_code = new_ir_code(IR_ARRAY_ALLOC, size_op, NULL, array_op);
-    if (alloc_code) {
-        printf("[IR DEBUG] Generated ARRAY_ALLOC for %s[%d]\n", array_name->type_id, size);
-        append_ir_code(ir_list, alloc_code);
-    }
-    
-    free(array_op->name);
-    free(array_op);
+        
+        // 创建数组操作数
+        Operand *array_op = (Operand *)calloc(1, sizeof(Operand));
+        if (!array_op) {
+            printf("[ERROR] Failed to allocate array operand\n");
+            return;
+        }
+        
+        array_op->kind = OP_VAR;
+        array_op->name = strdup(array_name->type_id ? array_name->type_id : "unnamed_array");
+        if (array_sym->type) {
+            array_op->type = copy_type(array_sym->type);
+        } else {
+            array_op->type = new_basic_type(TYPE_INT);
+        }
+        array_op->offset = array_sym->offset;
+        
+        // 创建大小操作数
+        int size = 1;
+        if (array_size && array_size->kind == INT_NODE) {
+            size = array_size->type_int;
+        }
+        
+        Operand *size_op = new_const_operand_int(size);
+        if (!size_op) {
+            printf("[ERROR] Failed to create size operand\n");
+            free(array_op->name);
+            free(array_op);
+            return;
+        }
+        
+        // 生成指令
+        IRCode *alloc_code = new_ir_code(IR_ARRAY_ALLOC, size_op, NULL, array_op);
+        if (alloc_code) {
+            printf("[DEBUG] copy_type: copying type kind=1\n");
+            printf("[DEBUG] copy_type: copying ARRAY type\n");
+            printf("[DEBUG] copy_type: copying type kind=0\n");
+            printf("[DEBUG] copy_type: copying BASIC type, basic=1\n");
+            printf("[DEBUG] copy_type: successfully copied type\n");
+            printf("[DEBUG] copy_type: successfully copied type\n");
+            printf("[IR DEBUG] Generated ARRAY_ALLOC instruction\n");
+            append_ir_code(ir_list, alloc_code);
+        }
+        
+        // 注意：不要在这里释放array_op，它被IRCode使用了
     }
 }
 
@@ -2361,6 +2370,35 @@ static void gen_ir_array_access(ASTNode *node, IRList *ir_list, Operand *result,
             
             free(array_op->name);
             free(array_op);
+        }
+    }
+}
+
+/* 生成复合语句的中间代码 */
+static void gen_ir_compound_stmt(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
+    if (!node || node->kind != COMP_ST || !ir_list) return;
+    
+    printf("[IR DEBUG] Processing COMP_ST statement\n");
+    
+    // 处理复合语句中的所有子节点
+    for (int i = 0; i < 4; i++) {
+        if (node->ptr[i]) {
+            printf("[IR DEBUG] COMP_ST child %d: kind=%d\n", i, node->ptr[i]->kind);
+            
+            // 如果是声明列表，处理声明
+            if (node->ptr[i]->kind == DEF_LIST) {
+                printf("[IR DEBUG] Processing declaration list in COMP_ST\n");
+                gen_ir_stmt(node->ptr[i], ir_list, NULL, symtab);
+            }
+            // 如果是语句列表，处理语句
+            else if (node->ptr[i]->kind == STMT_LIST) {
+                printf("[IR DEBUG] Processing statement list in COMP_ST\n");
+                gen_ir_stmt(node->ptr[i], ir_list, NULL, symtab);
+            }
+            // 其他情况，直接处理
+            else {
+                gen_ir_stmt(node->ptr[i], ir_list, NULL, symtab);
+            }
         }
     }
 }
