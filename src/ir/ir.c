@@ -578,8 +578,8 @@ void print_ir_code(IRCode *code) {
             
         case IR_ARRAY_STORE:
             printf("  ");
-            if (code->op1 && code->op1->name) {
-                printf("%s", code->op1->name);
+            if (code->op1) {
+                print_operand(code->op1);
             } else {
                 printf("array");
             }
@@ -1439,28 +1439,28 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
     
     if (!left || !right) return;
     
-    // 为右操作数创建一个临时变量
-    Type *right_type = right->type_info;
-    if (!right_type) right_type = new_basic_type(TYPE_INT);
-    
-    Operand *right_temp = new_temp_operand(right_type);
-    if (!right_temp) {
-        printf("[ERROR] Failed to create right temp operand\n");
-        return;
-    }
-    
-    // 生成右操作数的值
-    gen_ir_expr(right, ir_list, right_temp, symtab);
-    
-    // 将右操作数的值赋给结果（作为表达式的值）
-    IRCode *assign_result = new_ir_code(IR_ASSIGN, right_temp, NULL, result);
-    if (assign_result) {
-        append_ir_code(ir_list, assign_result);
-    }
-    
-    // 检查是否是数组赋值
+    // 处理数组赋值的情况
     if (left->kind == ARRAY_ACCESS) {
-        // 数组元素赋值 - 直接使用右操作数的值
+        // 为右操作数生成代码
+        Type *right_type = right->type_info;
+        if (!right_type) right_type = new_basic_type(TYPE_INT);
+        
+        Operand *right_temp = new_temp_operand(right_type);
+        if (!right_temp) {
+            printf("[ERROR] Failed to create right temp operand\n");
+            return;
+        }
+        
+        // 生成右操作数的值
+        gen_ir_expr(right, ir_list, right_temp, symtab);
+        
+        // 将右操作数的值赋给结果（作为表达式的值）
+        IRCode *assign_result = new_ir_code(IR_ASSIGN, right_temp, NULL, result);
+        if (assign_result) {
+            append_ir_code(ir_list, assign_result);
+        }
+        
+        // 数组元素赋值
         printf("[IR DEBUG] Array element assignment using new function\n");
         gen_ir_array_store(left, right_temp, ir_list, symtab);
         
@@ -1493,8 +1493,6 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
         if (is_compound) {
             printf("[IR DEBUG] Processing compound assignment: %s\n", op);
             
-            // 对于复合赋值：a += b 等价于 a = a + b
-            
             // 首先获取左操作数的值
             Type *left_type = left->type_info;
             if (!left_type) left_type = new_basic_type(TYPE_INT);
@@ -1512,6 +1510,15 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
             } else {
                 gen_ir_expr(left, ir_list, left_temp, symtab);
             }
+            
+            // 为右操作数生成代码
+            Type *right_type = right->type_info;
+            if (!right_type) right_type = new_basic_type(TYPE_INT);
+            
+            Operand *right_temp = new_temp_operand(right_type);
+            if (!right_temp) return;
+            
+            gen_ir_expr(right, ir_list, right_temp, symtab);
             
             // 执行运算
             if (strcmp(op, "%=") == 0) {
@@ -2363,42 +2370,27 @@ static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_l
             }
         } else if (base_array->kind == ARRAY_ACCESS) {
             // 多维数组：matrix[i][j] = value
-            // 需要获取内层数组的基址
+            // 需要获取内层数组的地址
             
-            // 首先为内层数组创建一个临时变量来存储其地址
-            Operand *inner_array_temp = new_temp_operand(new_basic_type(TYPE_INT));
-            if (!inner_array_temp) return;
+            // 为内层数组的地址创建一个临时变量
+            Operand *inner_array_addr = new_temp_operand(new_basic_type(TYPE_INT));
+            if (!inner_array_addr) return;
             
             // 递归获取内层数组的地址
-            // 这里的关键是：我们需要获取 matrix[i] 的值，它本身是一个数组的基址
-            gen_ir_array_access(base_array, ir_list, inner_array_temp, symtab);
+            // 这里调用 gen_ir_array_access 获取 matrix[i] 的地址
+            gen_ir_array_access(base_array, ir_list, inner_array_addr, symtab);
             
-            // 现在 inner_array_temp 包含了 matrix[i] 的地址
+            // 现在 inner_array_addr 包含了 matrix[i] 的地址
             // 我们需要将其用作数组基址
             
-            // 创建一个操作数来表示内层数组
-            Operand *inner_array_op = (Operand *)calloc(1, sizeof(Operand));
-            if (!inner_array_op) {
-                printf("[ERROR] Failed to allocate inner array operand\n");
-                return;
-            }
-            
-            inner_array_op->kind = OP_VAR;
-            inner_array_op->name = strdup(inner_array_temp->name);
-            inner_array_op->type = copy_type(new_basic_type(TYPE_INT));
-            inner_array_op->offset = 0;
-            
             // 生成数组存储指令
-            IRCode *store_code = new_ir_code(IR_ARRAY_STORE, inner_array_op, index_temp, value);
+            // 使用 inner_array_addr 作为数组操作数
+            IRCode *store_code = new_ir_code(IR_ARRAY_STORE, inner_array_addr, index_temp, value);
             if (store_code) {
                 printf("[IR DEBUG] Generated multi-dimensional ARRAY_STORE for %s[%s] = %s\n", 
-                       inner_array_op->name, index_temp->name, value->name);
+                       inner_array_addr->name, index_temp->name, value->name);
                 append_ir_code(ir_list, store_code);
             }
-            
-            // 清理
-            free(inner_array_op->name);
-            free(inner_array_op);
             
         } else {
             printf("[ERROR] Unsupported array base type: %d\n", base_array->kind);
