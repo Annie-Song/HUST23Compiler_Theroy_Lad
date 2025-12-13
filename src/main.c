@@ -11,6 +11,9 @@
 // 声明全局根节点（在parser.y中定义）
 extern ASTNode *root;
 
+// 修复：声明全局符号表变量（在semantic.c中定义）
+extern SymbolTable *symbol_table;
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
@@ -64,8 +67,16 @@ int main(int argc, char *argv[]) {
             printf("\n=== Phase 3: Intermediate Code Generation ===\n");
             
             if (root) {
-                // 生成中间代码 - 现在需要符号表
-                // 注意：symbol_table 应该在 semantic_analysis 中初始化
+                // 确保符号表已初始化
+                if (!symbol_table) {
+                    printf("[WARNING] symbol_table is NULL. Initializing now...\n");
+                    // 如果符号表未初始化，尝试初始化
+                    symbol_table = create_symbol_table();
+                    if (symbol_table) {
+                        init_symbol_table(symbol_table);
+                    }
+                }
+                
                 if (symbol_table) {
                     IRList *ir_list = gen_ir_from_ast(root, symbol_table);
                     

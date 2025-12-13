@@ -390,6 +390,9 @@ static void check_array_dec(ASTNode *node, Type *type, int is_global) {
             array_name->symbol_ref = entry;
             array_name->type_info = final_array_type;
             array_name->is_lvalue = 1;
+
+            // 修复：同时为数组声明节点本身也设置symbol_ref
+            node->symbol_ref = entry;
             
             /* 设置数组额外信息 */
             array_name->array_info.array_size = dim_sizes[dims-1];  /* 最内层大小 */

@@ -50,7 +50,12 @@ typedef enum {
     IR_CALL,         /* 函数调用（有返回值） */
     IR_CALL_VOID,    /* 函数调用（无返回值） */
     IR_READ,         /* 读 */
-    IR_WRITE         /* 写 */
+    IR_WRITE,         /* 写 */
+    IR_ARRAY_ALLOC,  /* 数组分配（新增） */
+    IR_ARRAY_LOAD,   /* 数组加载（新增） */
+    IR_ARRAY_STORE,  /* 数组存储（新增） */
+    IR_ADDRESS,      /* 取地址（新增） */
+    IR_DEREF,        /* 解引用（新增） */
 } IROpCode;
 
 /* 中间代码指令 */
