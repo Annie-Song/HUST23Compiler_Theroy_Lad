@@ -78,6 +78,8 @@ static void gen_ir_if_else_stmt(ASTNode *node, IRList *ir_list, char *next_label
 static void gen_ir_while_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab);
 static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, SymbolTable *symtab);
 static void gen_ir_init_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
+static void gen_ir_def_dec_list(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
+static void gen_ir_array_access(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab);
 
 /* ================== 操作数创建函数 ================== */
 
@@ -681,9 +683,22 @@ static void gen_ir_stmt(ASTNode *node, IRList *ir_list, char *next_label, Symbol
             // 处理变量定义
             if (node->ptr[0] && node->ptr[1]) {
                 ASTNode *dec_list = node->ptr[1];
-                if (dec_list && dec_list->kind == INIT_DEC) {
-                    gen_ir_init_dec(dec_list, ir_list, symtab);
+                if (dec_list) {
+                    // 处理声明列表
+                    gen_ir_def_dec_list(dec_list, ir_list, symtab);
                 }
+            }
+            break;
+
+        case DEF_LIST:  // 新增：处理定义列表
+            printf("[IR DEBUG] Processing DEF_LIST\n");
+            if (node->ptr[0]) {
+                // 处理第一个定义
+                gen_ir_stmt(node->ptr[0], ir_list, next_label, symtab);
+            }
+            if (node->ptr[1]) {
+                // 处理剩余的定义列表
+                gen_ir_stmt(node->ptr[1], ir_list, next_label, symtab);
             }
             break;
             
@@ -1109,16 +1124,53 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolT
             
         case ARRAY_ACCESS:  // 处理数组访问
             printf("[IR DEBUG] Processing ARRAY_ACCESS\n");
-            // 简化处理：暂时不支持数组
-            printf("[IR DEBUG] WARNING: Array access not fully supported yet\n");
-            Operand *zero_op = new_const_operand_int(0);
-            if (zero_op) {
-                IRCode *assign_code = new_ir_code(IR_ASSIGN, zero_op, NULL, result);
-                if (assign_code) {
-                    append_ir_code(ir_list, assign_code);
+            if (node->ptr[0] && node->ptr[1]) {
+                ASTNode *array = node->ptr[0];
+                ASTNode *index = node->ptr[1];
+                
+                // 生成数组基址
+                Operand *array_base = NULL;
+                if (array->symbol_ref) {
+                    array_base = new_var_operand(array->symbol_ref);
+                } else {
+                    // 处理多维数组访问
+                    Type *array_type = array->type_info;
+                    if (!array_type) array_type = new_basic_type(TYPE_INT);
+                    array_base = new_temp_operand(array_type);
+                    gen_ir_expr(array, ir_list, array_base, symtab);
+                }
+                
+                // 生成索引
+                Type *index_type = index->type_info;
+                if (!index_type) index_type = new_basic_type(TYPE_INT);
+                Operand *index_temp = new_temp_operand(index_type);
+                if (index_temp) {
+                    gen_ir_expr(index, ir_list, index_temp, symtab);
+                    
+                    // 计算偏移量：假设每个元素大小为4字节（int）
+                    Operand *offset = new_temp_operand(new_basic_type(TYPE_INT));
+                    if (offset) {
+                        Operand *four = new_const_operand_int(4);
+                        IRCode *mul_code = new_ir_code(IR_MUL, index_temp, four, offset);
+                        if (mul_code) append_ir_code(ir_list, mul_code);
+                        
+                        // 计算地址：base + offset
+                        IRCode *add_code = new_ir_code(IR_ADD, array_base, offset, result);
+                        if (add_code) append_ir_code(ir_list, add_code);
+                        
+                        // 注意：这里生成的是地址，不是值
+                        // 在实际的目标代码生成中，需要加载该地址的值
+                    }
+                }
+            } else {
+                printf("[IR DEBUG] WARNING: Invalid array access\n");
+                Operand *zero_op = new_const_operand_int(0);
+                if (zero_op) {
+                    IRCode *assign_code = new_ir_code(IR_ASSIGN, zero_op, NULL, result);
+                    if (assign_code) append_ir_code(ir_list, assign_code);
                 }
             }
-            break;
+            break;  
             
         default:
             printf("[IR DEBUG] Unhandled expression kind=%d, using default\n", node->kind);
@@ -1227,6 +1279,71 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result, 
         else if (strcmp(op_str, ">=") == 0) op_code = IR_GE;
         else if (strcmp(op_str, "==") == 0) op_code = IR_EQ;
         else if (strcmp(op_str, "!=") == 0) op_code = IR_NE;
+        else if (strcmp(op_str, "&&") == 0 || strcmp(op_str, "||") == 0) {
+            // 逻辑运算符：使用短路求值
+            printf("[DEBUG] Generating logical operator: %s\n", op_str);
+            
+            // 创建标签
+            Operand *true_label = new_label_operand();
+            Operand *false_label = new_label_operand();
+            Operand *end_label = new_label_operand();
+            
+            if (!true_label || !false_label || !end_label) {
+                printf("[ERROR] Failed to create labels for logical operator\n");
+                return;
+            }
+            
+            if (strcmp(op_str, "&&") == 0) {
+                // 逻辑与：先检查左操作数，如果为假直接跳到false
+                IRCode *if_false = new_ir_code(IR_IF, left_temp, NULL, false_label);
+                if (if_false) append_ir_code(ir_list, if_false);
+                
+                // 左操作数为真，检查右操作数
+                IRCode *if_true = new_ir_code(IR_IF, right_temp, NULL, true_label);
+                if (if_true) append_ir_code(ir_list, if_true);
+                
+                // 右操作数为假，跳转到false
+                IRCode *goto_false = new_ir_code(IR_GOTO, NULL, NULL, false_label);
+                if (goto_false) append_ir_code(ir_list, goto_false);
+            } else {
+                // 逻辑或：先检查左操作数，如果为真直接跳到true
+                IRCode *if_true = new_ir_code(IR_IF, left_temp, NULL, true_label);
+                if (if_true) append_ir_code(ir_list, if_true);
+                
+                // 左操作数为假，检查右操作数
+                IRCode *if_false = new_ir_code(IR_IF, right_temp, NULL, true_label);
+                if (if_false) append_ir_code(ir_list, if_false);
+                
+                // 右操作数为假，跳转到false
+                IRCode *goto_false = new_ir_code(IR_GOTO, NULL, NULL, false_label);
+                if (goto_false) append_ir_code(ir_list, goto_false);
+            }
+            
+            // true标签：结果为1
+            IRCode *label_true = new_ir_code(IR_LABEL, NULL, NULL, true_label);
+            if (label_true) append_ir_code(ir_list, label_true);
+            
+            Operand *one = new_const_operand_int(1);
+            IRCode *assign_one = new_ir_code(IR_ASSIGN, one, NULL, result);
+            if (assign_one) append_ir_code(ir_list, assign_one);
+            
+            IRCode *goto_end = new_ir_code(IR_GOTO, NULL, NULL, end_label);
+            if (goto_end) append_ir_code(ir_list, goto_end);
+            
+            // false标签：结果为0
+            IRCode *label_false = new_ir_code(IR_LABEL, NULL, NULL, false_label);
+            if (label_false) append_ir_code(ir_list, label_false);
+            
+            Operand *zero = new_const_operand_int(0);
+            IRCode *assign_zero = new_ir_code(IR_ASSIGN, zero, NULL, result);
+            if (assign_zero) append_ir_code(ir_list, assign_zero);
+            
+            // end标签
+            IRCode *label_end = new_ir_code(IR_LABEL, NULL, NULL, end_label);
+            if (label_end) append_ir_code(ir_list, label_end);
+            
+            return;  // 逻辑运算已经处理完毕，直接返回
+        }
         else {
             printf("[WARNING] Unknown binary operator: %s, using ADD\n", op_str);
             op_code = IR_ADD;
@@ -1236,8 +1353,9 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result, 
         op_code = IR_ADD;
     }
     
-    // 对于非模运算，正常生成代码
-    if (op_str && strcmp(op_str, "%") != 0) {
+    // 对于非特殊运算，正常生成代码
+    if (op_str && strcmp(op_str, "%") != 0 && 
+        strcmp(op_str, "&&") != 0 && strcmp(op_str, "||") != 0) {
         IRCode *binary_code = new_ir_code(op_code, left_temp, right_temp, result);
         if (binary_code) {
             append_ir_code(ir_list, binary_code);
@@ -1252,35 +1370,126 @@ static void gen_ir_binary_expr(ASTNode *node, IRList *ir_list, Operand *result, 
 static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
     if (!node || !ir_list || !result) return;
     
+    printf("[IR DEBUG] Processing ASSIGN_EXP: %s\n", node->type_id);
+    
     ASTNode *left = node->ptr[0];
     ASTNode *right = node->ptr[1];
     
     if (!left || !right) return;
     
-    // 生成右操作数的代码
-    Type *right_type = right->type_info;
-    if (!right_type) right_type = new_basic_type(TYPE_INT);
+    // 检查是否是复合赋值运算符（+=, -=, *=, /=, %=）
+    char *op = node->type_id;
+    int is_compound = 0;
+    IROpCode compound_op = IR_ADD;
     
-    Operand *right_temp = new_temp_operand(right_type);
-    if (!right_temp) return;
-    
-    gen_ir_expr(right, ir_list, right_temp, symtab);
-    
-    // 如果是变量赋值
-    if (left->symbol_ref) {
-        Operand *left_op = new_var_operand(left->symbol_ref);
-        if (left_op) {
-            IRCode *assign_code = new_ir_code(IR_ASSIGN, right_temp, NULL, left_op);
-            if (assign_code) {
-                append_ir_code(ir_list, assign_code);
-            }
+    if (op) {
+        if (strcmp(op, "+=") == 0) {
+            is_compound = 1;
+            compound_op = IR_ADD;
+        } else if (strcmp(op, "-=") == 0) {
+            is_compound = 1;
+            compound_op = IR_SUB;
+        } else if (strcmp(op, "*=") == 0) {
+            is_compound = 1;
+            compound_op = IR_MUL;
+        } else if (strcmp(op, "/=") == 0) {
+            is_compound = 1;
+            compound_op = IR_DIV;
+        } else if (strcmp(op, "%=") == 0) {
+            is_compound = 1;
+            // 模运算需要特殊处理
         }
     }
     
-    // 将结果赋给result（用于表达式求值）
-    IRCode *copy_code = new_ir_code(IR_ASSIGN, right_temp, NULL, result);
-    if (copy_code) {
-        append_ir_code(ir_list, copy_code);
+    if (is_compound) {
+        printf("[IR DEBUG] Processing compound assignment: %s\n", op);
+        
+        // 对于复合赋值：a += b 等价于 a = a + b
+        
+        // 首先获取左操作数的值
+        Type *left_type = left->type_info;
+        if (!left_type) left_type = new_basic_type(TYPE_INT);
+        
+        Operand *left_temp = new_temp_operand(left_type);
+        if (!left_temp) return;
+        
+        // 获取左操作数的当前值
+        if (left->symbol_ref) {
+            Operand *left_var = new_var_operand(left->symbol_ref);
+            if (left_var) {
+                IRCode *load_left = new_ir_code(IR_ASSIGN, left_var, NULL, left_temp);
+                if (load_left) append_ir_code(ir_list, load_left);
+            }
+        } else {
+            gen_ir_expr(left, ir_list, left_temp, symtab);
+        }
+        
+        // 生成右操作数的值
+        Type *right_type = right->type_info;
+        if (!right_type) right_type = new_basic_type(TYPE_INT);
+        
+        Operand *right_temp = new_temp_operand(right_type);
+        if (!right_temp) return;
+        
+        gen_ir_expr(right, ir_list, right_temp, symtab);
+        
+        // 执行运算
+        if (strcmp(op, "%=") == 0) {
+            // 模赋值：a %= b 等价于 a = a % b
+            // 需要特殊处理模运算
+            Operand *div_result = new_temp_operand(left_temp->type);
+            Operand *mul_result = new_temp_operand(left_temp->type);
+            
+            if (div_result && mul_result) {
+                // div_result = left / right
+                IRCode *div_code = new_ir_code(IR_DIV, left_temp, right_temp, div_result);
+                if (div_code) append_ir_code(ir_list, div_code);
+                
+                // mul_result = div_result * right
+                IRCode *mul_code = new_ir_code(IR_MUL, div_result, right_temp, mul_result);
+                if (mul_code) append_ir_code(ir_list, mul_code);
+                
+                // result = left - mul_result
+                IRCode *sub_code = new_ir_code(IR_SUB, left_temp, mul_result, result);
+                if (sub_code) append_ir_code(ir_list, sub_code);
+            }
+        } else {
+            // 其他复合赋值：a += b 等
+            IRCode *binary_code = new_ir_code(compound_op, left_temp, right_temp, result);
+            if (binary_code) append_ir_code(ir_list, binary_code);
+        }
+        
+        // 将结果赋给左操作数
+        if (left->symbol_ref) {
+            Operand *left_op = new_var_operand(left->symbol_ref);
+            if (left_op) {
+                IRCode *assign_code = new_ir_code(IR_ASSIGN, result, NULL, left_op);
+                if (assign_code) append_ir_code(ir_list, assign_code);
+            }
+        }
+        
+    } else {
+        // 普通赋值：a = b
+        printf("[IR DEBUG] Processing simple assignment: =\n");
+        
+        // 生成右操作数的代码，直接赋值给result
+        Type *right_type = right->type_info;
+        if (!right_type) right_type = new_basic_type(TYPE_INT);
+        
+        // 直接使用传入的result作为右操作数的目标
+        gen_ir_expr(right, ir_list, result, symtab);
+        
+        // 如果是变量赋值，还需要将结果赋给左操作数
+        if (left->symbol_ref) {
+            Operand *left_op = new_var_operand(left->symbol_ref);
+            if (left_op) {
+                // 将result的值赋给左操作数
+                IRCode *assign_code = new_ir_code(IR_ASSIGN, result, NULL, left_op);
+                if (assign_code) {
+                    append_ir_code(ir_list, assign_code);
+                }
+            }
+        }
     }
 }
 
@@ -1729,4 +1938,161 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     
     // ========== 退出循环上下文 ==========
     exit_loop();
+}
+
+/* 生成定义声明列表的中间代码 */
+static void gen_ir_def_dec_list(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
+    if (!node || !ir_list) return;
+    
+    printf("[IR DEBUG] Processing DEF_DEC_LIST kind=%d\n", node->kind);
+    
+    switch (node->kind) {
+        case ARRAY_DEC:  // 数组声明
+            printf("[IR DEBUG] Processing ARRAY_DEC\n");
+            // 数组声明在IR中通常不需要生成代码
+            // 内存分配在目标代码生成阶段处理
+            break;
+            
+        case ID_NODE:  // 变量声明
+            printf("[IR DEBUG] Processing variable declaration: %s\n", node->type_id);
+            // 简单变量声明，不需要生成初始化代码
+            break;
+            
+        case INIT_DEC:  // 初始化声明
+            printf("[IR DEBUG] Processing INIT_DEC in DEF\n");
+            gen_ir_init_dec(node, ir_list, symtab);
+            break;
+            
+        case DEC_LIST:  // 声明列表
+            printf("[IR DEBUG] Processing DEC_LIST\n");
+            if (node->ptr[0]) {
+                gen_ir_def_dec_list(node->ptr[0], ir_list, symtab);
+            }
+            if (node->ptr[1]) {
+                gen_ir_def_dec_list(node->ptr[1], ir_list, symtab);
+            }
+            break;
+            
+        default:
+            printf("[IR DEBUG] Unhandled declaration kind=%d in DEF\n", node->kind);
+            break;
+    }
+}
+
+/* 生成数组访问的中间代码 */
+static void gen_ir_array_access(ASTNode *node, IRList *ir_list, Operand *result, SymbolTable *symtab) {
+    if (!node || !ir_list || !result) return;
+    
+    printf("[IR DEBUG] gen_ir_array_access\n");
+    
+    ASTNode *array_node = node->ptr[0];  // 数组名
+    ASTNode *index_node = node->ptr[1];  // 索引表达式
+    
+    if (!array_node || !index_node) {
+        printf("[ERROR] Invalid array access node\n");
+        return;
+    }
+    
+    // 生成索引表达式的代码
+    Type *index_type = index_node->type_info;
+    if (!index_type) index_type = new_basic_type(TYPE_INT);
+    
+    Operand *index_temp = new_temp_operand(index_type);
+    if (!index_temp) return;
+    
+    gen_ir_expr(index_node, ir_list, index_temp, symtab);
+    
+    // 获取数组信息
+    if (array_node->kind == ID_NODE && array_node->symbol_ref) {
+        // 数组变量
+        SymbolEntry *array_sym = array_node->symbol_ref;
+        
+        // 创建数组地址操作数
+        Operand *array_addr = (Operand *)malloc(sizeof(Operand));
+        if (!array_addr) return;
+        
+        array_addr->kind = OP_VAR;
+        array_addr->name = strdup(array_node->type_id);
+        array_addr->type = copy_type(array_sym->type);
+        array_addr->offset = array_sym->offset;
+        
+        // 计算元素大小（对于int是4）
+        Operand *element_size = new_const_operand_int(4);
+        Operand *offset_temp = new_temp_operand(new_basic_type(TYPE_INT));
+        
+        if (element_size && offset_temp) {
+            // offset = index * element_size
+            IRCode *mul_code = new_ir_code(IR_MUL, index_temp, element_size, offset_temp);
+            if (mul_code) {
+                append_ir_code(ir_list, mul_code);
+            }
+            
+            // 创建数组元素地址：array_addr + offset
+            Operand *elem_addr = new_temp_operand(new_basic_type(TYPE_INT));
+            if (elem_addr) {
+                // 注意：这里我们生成一个特殊的 "地址计算" 操作
+                // 在实际的IR中，可能需要一个特殊的操作码
+                printf("[IR DEBUG] Array element address: %s + %s\n", 
+                       array_addr->name, offset_temp->name);
+                
+                // 简化：将地址计算表示为加法
+                IRCode *addr_code = new_ir_code(IR_ADD, array_addr, offset_temp, elem_addr);
+                if (addr_code) {
+                    append_ir_code(ir_list, addr_code);
+                }
+                
+                // 生成数组加载指令
+                // 创建一个特殊的 "数组加载" 操作码，或者使用现有的机制
+                // 这里我们使用一个特殊的操作数来表示数组元素
+                Operand *array_elem = (Operand *)malloc(sizeof(Operand));
+                if (array_elem) {
+                    array_elem->kind = OP_VAR;
+                    // 创建一个表示数组元素的操作数名
+                    char elem_name[64];
+                    snprintf(elem_name, sizeof(elem_name), "%s[%s]", 
+                            array_node->type_id, index_temp->name);
+                    array_elem->name = strdup(elem_name);
+                    array_elem->type = new_basic_type(TYPE_INT);  // 假设是int类型
+                    
+                    // 将数组元素的值赋给结果
+                    IRCode *load_code = new_ir_code(IR_ASSIGN, array_elem, NULL, result);
+                    if (load_code) {
+                        append_ir_code(ir_list, load_code);
+                    }
+                }
+            }
+        }
+    } else if (array_node->kind == ARRAY_ACCESS) {
+        // 多维数组访问：递归处理
+        printf("[IR DEBUG] Multi-dimensional array access\n");
+        
+        // 对于多维数组，我们需要计算更复杂的地址
+        // 简化处理：先获取内层数组，再计算偏移
+        
+        // 生成内层数组的地址
+        Operand *inner_array = new_temp_operand(new_basic_type(TYPE_INT));
+        if (inner_array) {
+            gen_ir_array_access(array_node, ir_list, inner_array, symtab);
+            
+            // 这里应该计算多维数组的偏移
+            // 简化：返回0
+            Operand *zero_op = new_const_operand_int(0);
+            if (zero_op) {
+                IRCode *assign_code = new_ir_code(IR_ASSIGN, zero_op, NULL, result);
+                if (assign_code) {
+                    append_ir_code(ir_list, assign_code);
+                }
+            }
+        }
+    } else {
+        printf("[ERROR] Invalid array node kind=%d\n", array_node->kind);
+        // 默认返回0
+        Operand *zero_op = new_const_operand_int(0);
+        if (zero_op) {
+            IRCode *assign_code = new_ir_code(IR_ASSIGN, zero_op, NULL, result);
+            if (assign_code) {
+                append_ir_code(ir_list, assign_code);
+            }
+        }
+    }
 }
