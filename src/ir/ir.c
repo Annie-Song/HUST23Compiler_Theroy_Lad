@@ -61,32 +61,158 @@ Operand *new_var_operand(SymbolEntry *sym) {
     return op;
 }
 
+/* 创建临时变量操作数 */
 Operand *new_temp_operand(Type *type) {
     Operand *op = (Operand *)malloc(sizeof(Operand));
-    if (!op) return NULL;
+    if (!op) {
+        printf("[ERROR] Failed to allocate memory for temp operand\n");
+        return NULL;
+    }
     
     op->kind = OP_VAR;
     char name[32];
     snprintf(name, sizeof(name), "t%d", temp_counter++);
     op->name = strdup(name);
     
-    /* 检查类型是否有效 */
+    /* ========== 加强类型检查和错误处理 ========== */
+    
+    // 1. 检查type是否为NULL
     if (!type) {
-        printf("[WARNING] Temp operand type is NULL, using int\n");
+        printf("[DEBUG] Temp operand type is NULL, using int as default\n");
         op->type = new_basic_type(TYPE_INT);
-    } else if (type->kind == TK_FUNCTION) {
-        /* 函数类型不能用作临时变量的类型，使用int作为默认类型 */
-        printf("[WARNING] Attempt to create temp operand with function type, using int instead\n");
+        op->offset = 0;
+        printf("[DEBUG] Created temp operand %s with default int type\n", op->name);
+        return op;
+    }
+    
+    // 2. 检查type的kind是否有效
+    if (type->kind < TK_BASIC || type->kind > TK_STRUCT) {
+        printf("[DEBUG] WARNING: Temp operand has invalid type kind=%d (expected 0-3), using int\n", 
+               type->kind);
         op->type = new_basic_type(TYPE_INT);
-    } else {
-        op->type = copy_type(type);
-        if (!op->type) {
-            printf("[WARNING] Failed to copy type for temp operand, using int\n");
+        op->offset = 0;
+        printf("[DEBUG] Created temp operand %s with corrected int type\n", op->name);
+        return op;
+    }
+    
+    /* 根据类型种类处理 */
+    switch (type->kind) {
+        case TK_BASIC:
+            /* 基本类型：直接复制 */
+            printf("[DEBUG] Temp operand has BASIC type, basic=%d\n", type->basic);
+            op->type = copy_type(type);
+            if (!op->type) {
+                printf("[DEBUG] Failed to copy basic type, using int\n");
+                op->type = new_basic_type(TYPE_INT);
+            }
+            break;
+            
+        case TK_ARRAY:
+            /* 数组类型：使用数组元素类型 */
+            printf("[DEBUG] Temp operand has ARRAY type\n");
+            
+            // 检查数组元素类型是否有效
+            if (!type->array.elem) {
+                printf("[DEBUG] Array element type is NULL, using int\n");
+                op->type = new_basic_type(TYPE_INT);
+                break;
+            }
+            
+            // 检查数组元素类型的kind是否有效
+            if (type->array.elem->kind < TK_BASIC || type->array.elem->kind > TK_STRUCT) {
+                printf("[DEBUG] Array element has invalid type kind=%d, using int\n", 
+                       type->array.elem->kind);
+                op->type = new_basic_type(TYPE_INT);
+                break;
+            }
+            
+            // 处理数组元素类型
+            if (type->array.elem->kind == TK_ARRAY) {
+                /* 如果是多维数组，递归处理以获取最终的元素类型 */
+                printf("[DEBUG] Multi-dimensional array, recursing for element type\n");
+                Operand *elem_op = new_temp_operand(type->array.elem);
+                if (elem_op && elem_op->type) {
+                    op->type = elem_op->type;
+                    // 释放临时操作数但不释放类型
+                    free(elem_op->name);
+                    free(elem_op);
+                } else {
+                    printf("[DEBUG] Failed to get element type from multi-dimensional array, using int\n");
+                    op->type = new_basic_type(TYPE_INT);
+                }
+            } else {
+                /* 单维数组：复制元素类型 */
+                op->type = copy_type(type->array.elem);
+                if (!op->type) {
+                    printf("[DEBUG] Failed to copy array element type, using int\n");
+                    op->type = new_basic_type(TYPE_INT);
+                }
+            }
+            break;
+            
+        case TK_FUNCTION:
+            /* 函数类型不能用作临时变量的类型，使用返回类型或默认int */
+            printf("[DEBUG] Temp operand has FUNCTION type\n");
+            
+            if (type->func.return_type && 
+                type->func.return_type->kind >= TK_BASIC && 
+                type->func.return_type->kind <= TK_STRUCT) {
+                // 使用函数的返回类型
+                printf("[DEBUG] Using function return type\n");
+                op->type = copy_type(type->func.return_type);
+                if (!op->type) {
+                    printf("[DEBUG] Failed to copy function return type, using int\n");
+                    op->type = new_basic_type(TYPE_INT);
+                }
+            } else {
+                // 无法获取有效返回类型，使用int
+                printf("[DEBUG] No valid function return type, using int\n");
+                op->type = new_basic_type(TYPE_INT);
+            }
+            break;
+            
+        case TK_STRUCT:
+            /* 结构体类型：复制类型 */
+            printf("[DEBUG] Temp operand has STRUCT type\n");
+            op->type = copy_type(type);
+            if (!op->type) {
+                printf("[DEBUG] Failed to copy struct type, using int\n");
+                op->type = new_basic_type(TYPE_INT);
+            }
+            break;
+            
+        default:
+            /* 未知类型：使用int */
+            printf("[DEBUG] Temp operand has unknown type kind=%d, using int\n", type->kind);
             op->type = new_basic_type(TYPE_INT);
-        }
+            break;
+    }
+    
+    /* ========== 最终验证 ========== */
+    
+    // 确保op->type不为NULL
+    if (!op->type) {
+        printf("[DEBUG] WARNING: op->type became NULL, using int\n");
+        op->type = new_basic_type(TYPE_INT);
     }
     
     op->offset = 0;
+    
+    // 调试输出最终类型信息
+    if (op->type) {
+        printf("[DEBUG] Created temp operand %s with type: kind=%d", 
+               op->name, op->type->kind);
+        if (op->type->kind == TK_BASIC) {
+            printf(", basic=%d", op->type->basic);
+        } else if (op->type->kind == TK_ARRAY) {
+            printf(", array element kind=%d", 
+                   op->type->array.elem ? op->type->array.elem->kind : -1);
+        }
+        printf("\n");
+    } else {
+        printf("[DEBUG] ERROR: Failed to set type for temp operand %s\n", op->name);
+    }
+    
     return op;
 }
 
@@ -531,9 +657,52 @@ static void gen_ir_init_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab)
     
     if (!var_node || !init_expr) return;
     
-    // 生成初始化表达式的中间代码
-    Type *init_type = init_expr->type_info;
-    if (!init_type) init_type = new_basic_type(TYPE_INT);
+    // ========== 修复：正确处理函数调用的类型 ==========
+    Type *init_type = NULL;
+    
+    if (init_expr->kind == FUNC_CALL) {
+        printf("[IR DEBUG] INIT_DEC: init_expr is FUNC_CALL, special handling\n");
+        
+        // 对于函数调用，我们需要获取函数的返回类型
+        // 首先尝试从type_info获取
+        if (init_expr->type_info) {
+            printf("[IR DEBUG] FUNC_CALL has type_info kind=%d\n", init_expr->type_info->kind);
+            
+            // 如果type_info是函数类型，提取返回类型
+            if (init_expr->type_info->kind == TK_FUNCTION) {
+                if (init_expr->type_info->func.return_type) {
+                    printf("[IR DEBUG] Extracting return type from function type\n");
+                    init_type = copy_type(init_expr->type_info->func.return_type);
+                } else {
+                    printf("[IR DEBUG] No return type in function type, using int\n");
+                    init_type = new_basic_type(TYPE_INT);
+                }
+            }
+            // 如果type_info是数组类型，但表达式是函数调用，这是错误情况
+            else if (init_expr->type_info->kind == TK_ARRAY) {
+                printf("[IR DEBUG] ERROR: Function call has ARRAY type! Using int instead.\n");
+                init_type = new_basic_type(TYPE_INT);
+            }
+            // 其他情况（BASIC类型），直接使用
+            else {
+                init_type = copy_type(init_expr->type_info);
+            }
+        } else {
+            printf("[IR DEBUG] FUNC_CALL has no type_info, using int\n");
+            init_type = new_basic_type(TYPE_INT);
+        }
+    } else {
+        // 非函数调用表达式，正常处理
+        init_type = init_expr->type_info ? copy_type(init_expr->type_info) : new_basic_type(TYPE_INT);
+    }
+    
+    // 确保init_type不为NULL
+    if (!init_type) {
+        printf("[IR DEBUG] WARNING: init_type is NULL, using int\n");
+        init_type = new_basic_type(TYPE_INT);
+    }
+    
+    printf("[IR DEBUG] Final init_type: kind=%d\n", init_type->kind);
     
     Operand *init_temp = new_temp_operand(init_type);
     if (!init_temp) return;
@@ -560,52 +729,54 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolT
     
     switch (node->kind) {
         case ID_NODE:
-            printf("[IR DEBUG] Processing identifier: %s\n", node->type_id ? node->type_id : "NULL");
+            printf("[IR DEBUG] Processing identifier: %s\n", node->type_id);
+            printf("[IR DEBUG] Node has type_info: %s\n", node->type_info ? "YES" : "NO");
+            if (node->type_info) {
+                printf("[IR DEBUG] type_info kind=%d\n", node->type_info->kind);
+                if (node->type_info->kind == TK_ARRAY) {
+                    printf("[IR DEBUG] WARNING: identifier %s has array type!\n", node->type_id);
+                }
+            }
+            printf("[IR DEBUG] Node has symbol_ref: %s\n", node->symbol_ref ? "YES" : "NO");
+            
+            Operand *src_op = NULL;
             
             // 如果已有 symbol_ref，使用它
             if (node->symbol_ref) {
                 printf("[IR DEBUG] Using existing symbol_ref\n");
-                Operand *var_op = new_var_operand(node->symbol_ref);
-                if (var_op) {
-                    IRCode *assign_code = new_ir_code(IR_ASSIGN, var_op, NULL, result);
-                    if (assign_code) {
-                        append_ir_code(ir_list, assign_code);
+                src_op = new_var_operand(node->symbol_ref);
+            } else {
+                // 如果 symbol_ref 为 NULL，创建临时操作数
+                printf("[IR DEBUG] Symbol ref is NULL for %s, creating var operand\n", node->type_id);
+                
+                // 创建一个临时的变量操作数
+                src_op = (Operand *)malloc(sizeof(Operand));
+                if (src_op) {
+                    src_op->kind = OP_VAR;
+                    src_op->name = strdup(node->type_id);
+                    // 使用节点的类型信息，如果没有则用int
+                    if (node->type_info) {
+                        src_op->type = copy_type(node->type_info);
+                    } else {
+                        src_op->type = new_basic_type(TYPE_INT);
                     }
+                    src_op->offset = 0;
+                }
+            }
+            
+            if (src_op) {
+                IRCode *assign_code = new_ir_code(IR_ASSIGN, src_op, NULL, result);
+                if (assign_code) {
+                    append_ir_code(ir_list, assign_code);
                 }
             } else {
-                // 如果 symbol_ref 为 NULL，尝试从符号表查找
-                printf("[IR DEBUG] Symbol ref is NULL, looking up symbol: %s\n", node->type_id);
-                if (symtab) {
-                    SymbolEntry *sym = lookup_symbol(symtab, node->type_id);
-                    if (sym) {
-                        printf("[IR DEBUG] Found symbol in symbol table\n");
-                        node->symbol_ref = sym;  // 链接到符号表条目
-                        Operand *var_op = new_var_operand(sym);
-                        if (var_op) {
-                            IRCode *assign_code = new_ir_code(IR_ASSIGN, var_op, NULL, result);
-                            if (assign_code) {
-                                append_ir_code(ir_list, assign_code);
-                            }
-                        }
-                    } else {
-                        printf("[ERROR] Identifier node has no symbol reference and not found in symbol table: %s\n", node->type_id);
-                        // 如果找不到符号，使用默认值
-                        Operand *const_op = new_const_operand_int(0);
-                        if (const_op) {
-                            IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
-                            if (assign_code) {
-                                append_ir_code(ir_list, assign_code);
-                            }
-                        }
-                    }
-                } else {
-                    printf("[ERROR] Symbol table is NULL for identifier: %s\n", node->type_id);
-                    Operand *const_op = new_const_operand_int(0);
-                    if (const_op) {
-                        IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
-                        if (assign_code) {
-                            append_ir_code(ir_list, assign_code);
-                        }
+                printf("[ERROR] Failed to create operand for identifier: %s\n", node->type_id);
+                // 如果连操作数都创建失败，使用常量0
+                Operand *const_op = new_const_operand_int(0);
+                if (const_op) {
+                    IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
+                    if (assign_code) {
+                        append_ir_code(ir_list, assign_code);
                     }
                 }
             }
@@ -832,7 +1003,7 @@ static void gen_ir_func_call(ASTNode *node, IRList *ir_list, Operand *result, Sy
     }
 }
 
-/* 生成实参的中间代码 */
+/* 生成实参的中间代码 - 简化版 */
 static void gen_ir_args(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
     if (!node || !ir_list) return;
     
@@ -843,30 +1014,22 @@ static void gen_ir_args(ASTNode *node, IRList *ir_list, SymbolTable *symtab) {
             printf("[IR DEBUG] Processing argument at ptr[0], kind=%d\n", node->ptr[0]->kind);
             
             // 为实参表达式生成临时变量
-            Type *arg_type = node->ptr[0]->type_info;
+            Type *arg_type = NULL;
             
-            // 如果类型信息为NULL，尝试从节点获取或使用默认
-            if (!arg_type) {
-                // 如果是标识符，尝试从符号表获取类型
-                if (node->ptr[0]->kind == ID_NODE && symtab) {
-                    printf("[IR DEBUG] Argument is identifier, looking up in symbol table\n");
-                    SymbolEntry *sym = lookup_symbol(symtab, node->ptr[0]->type_id);
-                    if (sym && sym->type) {
-                        arg_type = sym->type;
-                        printf("[IR DEBUG] Found type from symbol table: kind=%d\n", arg_type->kind);
-                        // 更新节点的类型信息
-                        node->ptr[0]->type_info = copy_type(arg_type);
-                        node->ptr[0]->symbol_ref = sym;
-                    } else {
-                        printf("[IR DEBUG] Symbol not found, using int\n");
-                        arg_type = new_basic_type(TYPE_INT);
-                    }
-                } else {
-                    printf("[IR DEBUG] Argument type is NULL, using int\n");
-                    arg_type = new_basic_type(TYPE_INT);
-                }
-            } else {
-                printf("[IR DEBUG] Argument type kind=%d\n", arg_type->kind);
+            // 首先使用节点已有的类型信息
+            if (node->ptr[0]->type_info) {
+                arg_type = node->ptr[0]->type_info;
+                printf("[IR DEBUG] Using existing type_info: kind=%d\n", arg_type->kind);
+            } 
+            // 如果节点有symbol_ref，使用它的类型
+            else if (node->ptr[0]->symbol_ref && node->ptr[0]->symbol_ref->type) {
+                arg_type = node->ptr[0]->symbol_ref->type;
+                printf("[IR DEBUG] Using type from symbol_ref: kind=%d\n", arg_type->kind);
+            }
+            // 最后才创建默认类型
+            else {
+                printf("[IR DEBUG] No type info found, using int\n");
+                arg_type = new_basic_type(TYPE_INT);
             }
             
             Operand *arg_temp = new_temp_operand(arg_type);

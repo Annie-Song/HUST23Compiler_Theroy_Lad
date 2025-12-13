@@ -74,6 +74,7 @@ static int type_compatible(Type *t1, Type *t2);
 static void check_func_params(ASTNode *node, Type *return_type);
 static void check_func_param(ASTNode *node);
 static int check_assignment_compatible(Type *target, Type *source);
+static void check_func_call_args(ASTNode *node, SemanticContext *ctx);
 /* ================== 工具函数 ================== */
 
 /* 本地错误处理 */
@@ -431,7 +432,7 @@ static void check_init_dec(ASTNode *node, Type *type, int is_global) {
 
 /* ================== 函数定义检查 ================== */
 
-/* 检查函数定义 - 修复版本 */
+/* 检查函数定义 - 简化版本 */
 static void check_func_def(ASTNode *node) {
     if (!node || node->kind != FUNC_DEF) return;
     
@@ -456,15 +457,10 @@ static void check_func_def(ASTNode *node) {
     printf("[DEBUG] Function name: %s\n", func_name);
     
     /* 获取返回类型 */
-Type *return_type = get_type_from_ast(spec);
-printf("[DEBUG] check_func_def: return_type kind=%d\n", return_type->kind);
-
-/* 创建函数类型 */
-Type *func_type = new_func_type(return_type, NULL, 0);
-printf("[DEBUG] check_func_def: created func_type, func_type->func.return_type kind=%d\n", 
-       func_type->func.return_type ? func_type->func.return_type->kind : -1);
+    Type *return_type = get_type_from_ast(spec);
+    printf("[DEBUG] check_func_def: return_type kind=%d\n", return_type->kind);
     
-    /* 插入函数符号 - 传递返回类型，不是函数类型 */
+    /* 插入函数符号 */
     SymbolEntry *func_sym = insert_function(symbol_table, func_name, return_type, 0);
     if (!func_sym) {
         printf("[DEBUG] Failed to insert function symbol\n");
@@ -479,21 +475,20 @@ printf("[DEBUG] check_func_def: created func_type, func_type->func.return_type k
     enter_scope(symbol_table, func_name);
     printf("[DEBUG] Entered function scope\n");
     
-    /* 设置上下文 */
+    /* 设置上下文 - 使用符号表中的返回类型 */
     SemanticContext func_ctx = {0};
     func_ctx.in_function = 1;
-    func_ctx.return_type = copy_type(return_type);  // 复制返回类型给上下文
+    func_ctx.return_type = func_sym->type->func.return_type;  // 使用符号表中的类型，不复制
     func_ctx.has_return = 0;
     func_ctx.symbol_table = symbol_table;
     
     printf("[DEBUG] Context created: has_return = %d\n", func_ctx.has_return);
     
-    /* ===== 处理函数参数 ===== */
+    /* 处理函数参数 */
     if (func_dec->kind == FUNC_DEC && func_dec->ptr[1]) {
         printf("[DEBUG] Processing function parameters\n");
         check_func_params(func_dec->ptr[1], return_type);
     }
-    /* ===== 结束处理参数 ===== */
     
     /* 检查函数体 */
     if (body && body->kind == COMP_ST) {
@@ -522,10 +517,10 @@ printf("[DEBUG] check_func_def: created func_type, func_type->func.return_type k
     exit_scope(symbol_table);
     printf("[DEBUG] Exited function scope\n");
     
-    /* 清理 - 注意：func_type 现在由符号表管理，不要释放它 */
-    free_type(return_type);
-    free_type(func_ctx.return_type);
-   
+    /* 清理 - 注意：return_type 现在由符号表管理，不要释放 */
+    // free_type(return_type);  // 不要释放！
+    // func_ctx.return_type 是符号表中的指针，不要释放！
+    
     printf("[DEBUG] === EXIT check_func_def ===\n\n");
 }
 
@@ -1073,7 +1068,7 @@ static void check_assign_expr(ASTNode *node, SemanticContext *ctx) {
     node->is_lvalue = 0;
 }
 
-/* 检查函数调用 */
+/* 检查函数调用 - 确保返回类型正确 */
 static void check_func_call(ASTNode *node, SemanticContext *ctx) {
     if (!node || !ctx) return;
     
@@ -1101,14 +1096,19 @@ static void check_func_call(ASTNode *node, SemanticContext *ctx) {
     
     printf("[DEBUG] check_func_call: found function symbol, type=%p\n", (void*)func_sym->type);
     
+    /* 获取返回类型 - 确保不是函数类型 */
     Type *return_type = NULL;
     
-    /* 确定返回类型 */
     if (func_sym->type) {
         if (func_sym->type->kind == TK_FUNCTION) {
             /* 函数类型：获取返回类型 */
             printf("[DEBUG] check_func_call: function type found\n");
             return_type = func_sym->type->func.return_type;
+            // 确保返回类型是基本类型
+            if (return_type && return_type->kind == TK_FUNCTION) {
+                printf("[DEBUG] WARNING: Function returns function type, using int instead\n");
+                return_type = new_basic_type(TYPE_INT);
+            }
         } else if (func_sym->type->kind == TK_BASIC) {
             /* 基本类型：直接使用（旧式函数定义） */
             printf("[DEBUG] check_func_call: basic type found (legacy)\n");
@@ -1118,13 +1118,51 @@ static void check_func_call(ASTNode *node, SemanticContext *ctx) {
     
     if (return_type) {
         printf("[DEBUG] check_func_call: returning type kind=%d\n", return_type->kind);
+        // 复制返回类型
         node->type_info = copy_type(return_type);
     } else {
         printf("[DEBUG] check_func_call: no return type found, using int\n");
         node->type_info = new_basic_type(TYPE_INT);
     }
     
+    /* 检查函数参数 */
+    if (args_node) {
+        printf("[DEBUG] check_func_call: checking arguments\n");
+        check_func_call_args(args_node, ctx);
+    }
+    
     node->is_lvalue = 0;
+}
+
+/* 检查函数调用参数 - 新增函数 */
+static void check_func_call_args(ASTNode *node, SemanticContext *ctx) {
+    if (!node || !ctx) return;
+    
+    if (node->kind == ARGS) {
+        if (node->ptr[0]) {
+            printf("[DEBUG] check_func_call_args: checking argument\n");
+            // 检查参数表达式
+            check_expr(node->ptr[0], ctx);
+            
+            // 确保标识符参数有正确的类型信息
+            if (node->ptr[0]->kind == ID_NODE && !node->ptr[0]->type_info) {
+                printf("[DEBUG] check_func_call_args: identifier argument missing type_info\n");
+                // 尝试从符号表获取类型信息
+                char *arg_name = node->ptr[0]->type_id;
+                SymbolEntry *arg_sym = lookup_symbol(symbol_table, arg_name);
+                if (arg_sym && arg_sym->type) {
+                    node->ptr[0]->type_info = copy_type(arg_sym->type);
+                    node->ptr[0]->symbol_ref = arg_sym;
+                    printf("[DEBUG] check_func_call_args: set type_info for %s\n", arg_name);
+                }
+            }
+        }
+        
+        // 递归检查剩余参数
+        if (node->ptr[1]) {
+            check_func_call_args(node->ptr[1], ctx);
+        }
+    }
 }
 
 /* 检查数组访问 - 支持多维数组 */
