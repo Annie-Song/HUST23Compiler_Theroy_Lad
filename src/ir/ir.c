@@ -86,6 +86,7 @@ static void gen_ir_dec_list(ASTNode *node, IRList *ir_list, SymbolTable *symtab)
 static void gen_ir_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_array_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_compound_stmt(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
+static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_list, SymbolTable *symtab);
 
 /* ================== 操作数创建函数 ================== */
 
@@ -1458,87 +1459,9 @@ static void gen_ir_assign_expr(ASTNode *node, IRList *ir_list, Operand *result, 
     
     // 检查左操作数类型并处理赋值
     if (left->kind == ARRAY_ACCESS) {
-        // 数组元素赋值
-        printf("[IR DEBUG] Array element assignment\n");
-        
-        // 生成多维数组存储的关键代码
-        // 计算左操作数的地址
-        Type *target_type = NULL;
-        if (left->type_info) {
-            target_type = left->type_info;
-        } else if (left->ptr[0] && left->ptr[0]->type_info) {
-            // 如果数组访问本身没有类型，使用数组基址的类型
-            target_type = left->ptr[0]->type_info;
-        } else {
-            target_type = new_basic_type(TYPE_INT);
-        }
-        
-        Operand *array_addr = new_temp_operand(target_type);
-        if (!array_addr) {
-            printf("[ERROR] Failed to create array address temp operand\n");
-            return;
-        }
-        
-        // 获取数组基址和索引
-        gen_ir_array_access(left, ir_list, array_addr, symtab);
-        
-        // 现在我们需要将right_temp存储到array_addr指向的位置
-        // 由于我们只是计算了地址，需要生成实际的存储指令
-        // 简化方案：创建一个ARRAY_STORE指令
-        if (left->ptr[0] && left->ptr[0]->kind == ID_NODE) {
-            // 如果是基本数组：arr[i] = value
-            SymbolEntry *array_sym = left->ptr[0]->symbol_ref;
-            if (!array_sym && symtab) {
-                array_sym = lookup_symbol(symtab, left->ptr[0]->type_id);
-            }
-            
-            if (array_sym) {
-                // 创建数组操作数
-                Operand *array_op = (Operand *)calloc(1, sizeof(Operand));
-                if (!array_op) {
-                    printf("[ERROR] Failed to allocate array operand\n");
-                    return;
-                }
-                
-                array_op->kind = OP_VAR;
-                array_op->name = strdup(left->ptr[0]->type_id);
-                if (array_sym->type) {
-                    array_op->type = copy_type(array_sym->type);
-                } else {
-                    array_op->type = new_basic_type(TYPE_INT);
-                }
-                array_op->offset = array_sym->offset;
-                
-                // 处理索引
-                Operand *index_temp = new_temp_operand(new_basic_type(TYPE_INT));
-                if (!index_temp) {
-                    printf("[ERROR] Failed to create index operand\n");
-                    free(array_op->name);
-                    free(array_op);
-                    return;
-                }
-                
-                gen_ir_expr(left->ptr[1], ir_list, index_temp, symtab);
-                
-                // 生成数组存储指令
-                IRCode *store_code = new_ir_code(IR_ARRAY_STORE, array_op, index_temp, right_temp);
-                if (store_code) {
-                    printf("[IR DEBUG] Generated ARRAY_STORE for %s[%s] = %s\n", 
-                           left->ptr[0]->type_id, index_temp->name, right_temp->name);
-                    append_ir_code(ir_list, store_code);
-                }
-            } else {
-                printf("[ERROR] Array symbol not found for %s\n", left->ptr[0]->type_id);
-            }
-        } else {
-            // 多维数组或复杂表达式，使用简化方案
-            printf("[IR DEBUG] Multi-dimensional array store - using simplified approach\n");
-            // 这里需要更复杂的地址计算，暂时使用简单赋值
-            IRCode *assign_code = new_ir_code(IR_ASSIGN, right_temp, NULL, array_addr);
-            if (assign_code) {
-                append_ir_code(ir_list, assign_code);
-            }
-        }
+        // 数组元素赋值 - 使用新函数
+        printf("[IR DEBUG] Array element assignment using new function\n");
+        gen_ir_array_store(left, right_temp, ir_list, symtab);
         
     } else {
         // 非数组赋值的原有代码保持不变
@@ -2387,6 +2310,118 @@ static void gen_ir_array_access(ASTNode *node, IRList *ir_list, Operand *result,
     } else {
         printf("[ERROR] Unsupported array expression kind: %d\n", array_node->kind);
         return;
+    }
+}
+
+/* 生成数组存储指令（支持多维数组） */
+static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_list, SymbolTable *symtab) {
+    if (!array_node || !value || !ir_list) return;
+    
+    printf("[IR DEBUG] Generating array store for array node kind=%d\n", array_node->kind);
+    
+    if (array_node->kind == ARRAY_ACCESS) {
+        ASTNode *base_array = array_node->ptr[0];
+        ASTNode *index_node = array_node->ptr[1];
+        
+        if (!base_array || !index_node) return;
+        
+        // 生成索引表达式
+        Type *index_type = index_node->type_info;
+        if (!index_type) index_type = new_basic_type(TYPE_INT);
+        
+        Operand *index_temp = new_temp_operand(index_type);
+        if (!index_temp) return;
+        
+        gen_ir_expr(index_node, ir_list, index_temp, symtab);
+        
+        if (base_array->kind == ID_NODE) {
+            // 基础数组：arr[i] = value
+            SymbolEntry *array_sym = base_array->symbol_ref;
+            if (!array_sym && symtab) {
+                array_sym = lookup_symbol(symtab, base_array->type_id);
+            }
+            
+            if (array_sym) {
+                Operand *array_op = (Operand *)calloc(1, sizeof(Operand));
+                if (!array_op) {
+                    printf("[ERROR] Failed to allocate array operand\n");
+                    return;
+                }
+                
+                array_op->kind = OP_VAR;
+                array_op->name = strdup(base_array->type_id);
+                if (array_sym->type) {
+                    array_op->type = copy_type(array_sym->type);
+                } else {
+                    array_op->type = new_basic_type(TYPE_INT);
+                }
+                array_op->offset = array_sym->offset;
+                
+                // 生成数组存储指令
+                IRCode *store_code = new_ir_code(IR_ARRAY_STORE, array_op, index_temp, value);
+                if (store_code) {
+                    printf("[IR DEBUG] Generated ARRAY_STORE for %s[%s] = %s\n", 
+                           base_array->type_id, index_temp->name, value->name);
+                    append_ir_code(ir_list, store_code);
+                }
+            } else {
+                printf("[ERROR] Array symbol not found for %s\n", base_array->type_id);
+            }
+        } else if (base_array->kind == ARRAY_ACCESS) {
+            // 多维数组：matrix[i][j] = value
+            // 首先获取内层数组的地址
+            Type *temp_type = NULL;
+            if (base_array->type_info && base_array->type_info->kind == TK_ARRAY) {
+                temp_type = copy_type(base_array->type_info);
+            } else {
+                temp_type = new_basic_type(TYPE_INT);
+            }
+            
+            Operand *base_addr_temp = new_temp_operand(temp_type);
+            if (!base_addr_temp) {
+                free_type(temp_type);
+                return;
+            }
+            
+            // 递归获取内层数组地址
+            gen_ir_array_access(base_array, ir_list, base_addr_temp, symtab);
+            
+            // 现在 base_addr_temp 应该包含内层数组的地址
+            // 需要生成存储指令
+            
+            // 创建数组操作数（临时）
+            Operand *array_op = (Operand *)calloc(1, sizeof(Operand));
+            if (!array_op) {
+                printf("[ERROR] Failed to allocate temp array operand\n");
+                free_type(temp_type);
+                return;
+            }
+            
+            array_op->kind = OP_VAR;
+            array_op->name = strdup(base_addr_temp->name);
+            if (base_addr_temp->type) {
+                array_op->type = copy_type(base_addr_temp->type);
+            } else {
+                array_op->type = new_basic_type(TYPE_INT);
+            }
+            array_op->offset = base_addr_temp->offset;
+            
+            // 生成数组存储指令
+            IRCode *store_code = new_ir_code(IR_ARRAY_STORE, array_op, index_temp, value);
+            if (store_code) {
+                printf("[IR DEBUG] Generated multi-dimensional ARRAY_STORE for %s[%s] = %s\n", 
+                       array_op->name, index_temp->name, value->name);
+                append_ir_code(ir_list, store_code);
+            }
+            
+            free(array_op->name);
+            free(array_op);
+            free_type(temp_type);
+        } else {
+            printf("[ERROR] Unsupported array base type: %d\n", base_array->kind);
+        }
+    } else {
+        printf("[ERROR] Not an array access node for array store\n");
     }
 }
 
