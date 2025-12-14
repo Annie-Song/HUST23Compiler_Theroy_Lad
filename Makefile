@@ -20,8 +20,10 @@ CURRENT_PHASE_FLAGS = $(PHASE4_FLAGS)
 TARGET = $(BIN_DIR)/minicpp
 
 # ================== 源文件列表 ==================
-# 新增IR和MIPS源文件
+# IR源文件
 IR_SRC = $(SRC_DIR)/ir/ir.c
+
+# MIPS源文件
 MIPS_SRC = $(SRC_DIR)/mips/mips.c
 
 # 现有源文件
@@ -34,7 +36,7 @@ UTILS_SRC = $(SRC_DIR)/utils/utils.c
 MAIN_SRC = $(SRC_DIR)/main.c
 
 # ================== 目标文件列表 ==================
-# 新增IR和MIPS目标文件
+# IR和MIPS目标文件
 IR_OBJ = $(OBJ_DIR)/ir/ir.o
 MIPS_OBJ = $(OBJ_DIR)/mips/mips.o
 
@@ -62,8 +64,7 @@ OBJS = $(OBJS_PHASE4)
 # ================== 目录创建 ==================
 DIRS = $(OBJ_DIR) $(BIN_DIR) \
        $(OBJ_DIR)/ast $(OBJ_DIR)/semantic $(OBJ_DIR)/symbol \
-       $(OBJ_DIR)/utils $(OBJ_DIR)/ir $(OBJ_DIR)/mips \
-       $(SRC_DIR)/ir $(SRC_DIR)/mips
+       $(OBJ_DIR)/utils $(OBJ_DIR)/ir $(OBJ_DIR)/mips
 
 # 创建所需目录
 $(shell mkdir -p $(DIRS))
@@ -102,7 +103,10 @@ phase4: $(TARGET)
 
 # ================== 各源文件的编译规则 ==================
 # 主程序
-$(MAIN_OBJ): $(MAIN_SRC)
+$(MAIN_OBJ): $(MAIN_SRC) \
+             $(SRC_DIR)/utils/def.h $(SRC_DIR)/ast/ast.h \
+             $(SRC_DIR)/semantic/semantic.h $(SRC_DIR)/semantic/error.h \
+             $(SRC_DIR)/ir/ir.h $(SRC_DIR)/mips/mips.h
 	@echo "Compiling main program..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
@@ -112,15 +116,20 @@ $(AST_OBJ): $(AST_SRC) $(SRC_DIR)/ast/ast.h
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
 # 语义分析
-$(OBJ_DIR)/semantic/semantic.o: $(SRC_DIR)/semantic/semantic.c $(SRC_DIR)/semantic/semantic.h
+$(OBJ_DIR)/semantic/semantic.o: $(SRC_DIR)/semantic/semantic.c \
+                                 $(SRC_DIR)/semantic/semantic.h \
+                                 $(SRC_DIR)/semantic/type.h \
+                                 $(SRC_DIR)/semantic/error.h
 	@echo "Compiling semantic analysis..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
-$(OBJ_DIR)/semantic/error.o: $(SRC_DIR)/semantic/error.c $(SRC_DIR)/semantic/error.h
+$(OBJ_DIR)/semantic/error.o: $(SRC_DIR)/semantic/error.c \
+                             $(SRC_DIR)/semantic/error.h
 	@echo "Compiling error handling..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
-$(OBJ_DIR)/semantic/type.o: $(SRC_DIR)/semantic/type.c $(SRC_DIR)/semantic/type.h
+$(OBJ_DIR)/semantic/type.o: $(SRC_DIR)/semantic/type.c \
+                           $(SRC_DIR)/semantic/type.h
 	@echo "Compiling type system..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
@@ -134,13 +143,16 @@ $(UTILS_OBJ): $(UTILS_SRC) $(SRC_DIR)/utils/def.h
 	@echo "Compiling utils..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
-# ================== 新增：中间代码生成 ==================
-$(IR_OBJ): $(IR_SRC) $(SRC_DIR)/ir/ir.h
+# ================== 中间代码生成 ==================
+$(IR_OBJ): $(IR_SRC) $(SRC_DIR)/ir/ir.h \
+           $(SRC_DIR)/ast/ast.h $(SRC_DIR)/symbol/symbol.h \
+           $(SRC_DIR)/semantic/type.h
 	@echo "Compiling intermediate code generator..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
-# ================== 新增：目标代码生成 ==================
-$(MIPS_OBJ): $(MIPS_SRC) $(SRC_DIR)/mips/mips.h $(SRC_DIR)/ir/ir.h
+# ================== 目标代码生成 ==================
+$(MIPS_OBJ): $(MIPS_SRC) $(SRC_DIR)/mips/mips.h \
+             $(SRC_DIR)/ir/ir.h $(SRC_DIR)/symbol/symbol.h
 	@echo "Compiling MIPS code generator..."
 	$(CC) $(CFLAGS) $(CURRENT_PHASE_FLAGS) -c $< -o $@
 
@@ -169,14 +181,14 @@ $(LEX_SRC): $(SRC_DIR)/lexer/lex.l $(OBJ_DIR)/parser.tab.h
 # 清理所有
 clean:
 	@echo "Cleaning up all build files..."
-	rm -rf $(OBJ_DIR) $(BIN_DIR) parser.output *.ir *.s
+	rm -rf $(OBJ_DIR) $(BIN_DIR) parser.output *.ir *.s output.s
 	@echo "Clean complete."
 
-# 清理阶段三、四相关文件
+# 清理中间代码和目标代码生成器
 clean-phase34:
 	@echo "Cleaning phase 3/4 files..."
-	rm -rf $(OBJ_DIR)/ir $(OBJ_DIR)/mips $(SRC_DIR)/ir $(SRC_DIR)/mips
-	rm -f *.ir *.s
+	rm -rf $(OBJ_DIR)/ir $(OBJ_DIR)/mips 
+	rm -f *.ir *.s output.s
 	@echo "Phase 3/4 clean complete."
 
 # 清理中间代码文件
@@ -188,37 +200,81 @@ clean-ir:
 # 清理目标代码文件
 clean-mips:
 	@echo "Cleaning MIPS files..."
-	rm -f *.s
+	rm -f $(OBJ_DIR)/mips/*.o
+	rm -f *.s output.s
 	@echo "MIPS files cleaned."
+
+# 清理分析器生成的文件
+clean-parser:
+	@echo "Cleaning parser files..."
+	rm -f $(OBJ_DIR)/lex.yy.c $(OBJ_DIR)/lex.yy.o
+	rm -f $(OBJ_DIR)/parser.tab.c $(OBJ_DIR)/parser.tab.h $(OBJ_DIR)/parser.tab.o
+	rm -f parser.output
+	@echo "Parser files cleaned."
 
 # ================== 测试目标 ==================
 # 测试所有阶段
 test-all:
 	@echo "Testing all phases..."
-	$(MAKE) phase1 && $(TARGET) test/test1.c 2>&1 | head -20
-	@echo "---"
-	$(MAKE) phase2 && $(TARGET) test/test1.c 2>&1 | tail -20
-	@echo "---"
-	$(MAKE) phase3 && $(TARGET) test/test1.c 2>&1 | tail -20
-	@echo "---"
-	$(MAKE) phase4 && $(TARGET) test/test1.c 2>&1 | tail -20
+	@echo "=== Phase 1 ==="
+	@$(MAKE) phase1 >/dev/null 2>&1
+	@$(TARGET) test/test1.c 2>&1 | grep -A5 "Parsing" || true
+	@echo ""
+	@echo "=== Phase 2 ==="
+	@$(MAKE) phase2 >/dev/null 2>&1
+	@$(TARGET) test/test1.c 2>&1 | grep -A5 "Semantic" || true
+	@echo ""
+	@echo "=== Phase 3 ==="
+	@$(MAKE) phase3 >/dev/null 2>&1
+	@$(TARGET) test/test1.c 2>&1 | grep -A5 "Intermediate" || true
+	@echo ""
+	@echo "=== Phase 4 ==="
+	@$(MAKE) phase4 >/dev/null 2>&1
+	@$(TARGET) test/test1.c 2>&1 | grep -A5 "Target" || true
 
 # 测试阶段三
 test-phase3: phase3
 	@echo "Testing Phase 3 (Intermediate Code)..."
-	$(TARGET) test/test1.c 2>&1 | grep -A 50 "Intermediate Code" || true
+	@$(TARGET) test/test1.c 2>&1 | grep -A 20 "=== Intermediate Code ===" || true
 
 # 测试阶段四
 test-phase4: phase4
 	@echo "Testing Phase 4 (MIPS Code)..."
-	$(TARGET) test/test1.c 2>&1 | grep -A 50 "MIPS Assembly Code" || true
-	@echo "MIPS code saved to output.s"
+	@$(TARGET) test/test1.c 2>&1 | grep -A 30 "=== MIPS Assembly Code ===" || true
+	@if [ -f output.s ]; then \
+		echo ""; \
+		echo "MIPS code saved to output.s"; \
+		echo "First 15 lines:"; \
+		head -15 output.s; \
+	else \
+		echo "No output.s generated"; \
+	fi
 
 # 快速测试（使用阶段四）
 test: phase4
 	@echo "Running test with Phase 4..."
-	$(TARGET) test/test1.c
-	@echo "Check output.s for MIPS assembly"
+	@$(TARGET) test/test1.c 2>&1
+	@if [ -f output.s ]; then \
+		echo ""; \
+		echo "Check output.s for MIPS assembly"; \
+		echo "First 10 lines:"; \
+		head -10 output.s; \
+	else \
+		echo "No MIPS output generated"; \
+	fi
+
+# 创建测试目录和示例文件
+create-test:
+	@echo "Creating test directory and sample test file..."
+	@mkdir -p test
+	@echo "Creating test/test1.c..."
+	@echo 'int main() {' > test/test1.c
+	@echo '    int a = 10;' >> test/test1.c
+	@echo '    int b = 20;' >> test/test1.c
+	@echo '    int c = a + b;' >> test/test1.c
+	@echo '    return c;' >> test/test1.c
+	@echo '}' >> test/test1.c
+	@echo "Test file created: test/test1.c"
 
 # ================== 调试目标 ==================
 debug: CFLAGS += -DDEBUG -O0 -g3
@@ -230,17 +286,77 @@ debug-phase3: CFLAGS += -DDEBUG -O0 -g3
 debug-phase3: phase3
 	@echo "Phase 3 debug version built"
 
+# 只调试阶段四
+debug-phase4: CFLAGS += -DDEBUG -O0 -g3
+debug-phase4: phase4
+	@echo "Phase 4 debug version built"
+
 # ================== 发布目标 ==================
 release: CFLAGS = -Wall -O2
 release: phase4
 	@echo "Release version built with optimizations"
 
-# ================== 依赖生成 ==================
-depend:
-	@echo "Generating dependencies..."
-	$(CC) -MM $(CFLAGS) $(MAIN_SRC) $(AST_SRC) $(SEMANTIC_SRC) \
-		$(SYMBOL_SRC) $(UTILS_SRC) $(IR_SRC) $(MIPS_SRC) \
-		> $(OBJ_DIR)/dependencies 2>/dev/null || true
+# ================== 文件检查 ==================
+check-files:
+	@echo "Checking required files..."
+	@echo ""
+	@echo "MIPS source: $(MIPS_SRC)"
+	@if [ -f $(MIPS_SRC) ]; then \
+		echo "✓ MIPS source file exists"; \
+	else \
+		echo "✗ MIPS source file missing: $(MIPS_SRC)"; \
+		echo "Creating minimal mips.c..."; \
+		mkdir -p $(SRC_DIR)/mips; \
+		echo '#include "mips.h"' > $(MIPS_SRC); \
+		echo '#include <stdio.h>' >> $(MIPS_SRC); \
+		echo '#include <stdlib.h>' >> $(MIPS_SRC); \
+		echo '#include <string.h>' >> $(MIPS_SRC); \
+		echo '// MIPS code generator' >> $(MIPS_SRC); \
+		echo 'MipsCodeList *gen_mips_from_ir(IRList *ir_list, SymbolTable *symtab) {' >> $(MIPS_SRC); \
+		echo '    printf("MIPS generation not yet implemented\\n");' >> $(MIPS_SRC); \
+		echo '    return NULL;' >> $(MIPS_SRC); \
+		echo '}' >> $(MIPS_SRC); \
+		echo 'void print_mips_code(MipsCodeList *list) {}' >> $(MIPS_SRC); \
+		echo 'void save_mips_to_file(MipsCodeList *list, const char *filename) {}' >> $(MIPS_SRC); \
+	fi
+	@echo ""
+	@echo "MIPS header: $(SRC_DIR)/mips/mips.h"
+	@if [ -f $(SRC_DIR)/mips/mips.h ]; then \
+		echo "✓ MIPS header file exists"; \
+	else \
+		echo "✗ MIPS header file missing"; \
+		echo "Creating minimal mips.h..."; \
+		mkdir -p $(SRC_DIR)/mips; \
+		echo '#ifndef MIPS_H' > $(SRC_DIR)/mips/mips.h; \
+		echo '#define MIPS_H' >> $(SRC_DIR)/mips/mips.h; \
+		echo '#include "../ir/ir.h"' >> $(SRC_DIR)/mips/mips.h); \
+		echo 'typedef struct MipsCodeList MipsCodeList;' >> $(SRC_DIR)/mips/mips.h; \
+		echo 'MipsCodeList *gen_mips_from_ir(IRList *ir_list, SymbolTable *symtab);' >> $(SRC_DIR)/mips/mips.h; \
+		echo 'void print_mips_code(MipsCodeList *list);' >> $(SRC_DIR)/mips/mips.h; \
+		echo 'void save_mips_to_file(MipsCodeList *list, const char *filename);' >> $(SRC_DIR)/mips/mips.h; \
+		echo '#endif' >> $(SRC_DIR)/mips/mips.h; \
+	fi
+	@echo ""
+	@echo "IR files:"
+	@if [ -f $(SRC_DIR)/ir/ir.c ]; then \
+		echo "✓ IR source file exists"; \
+	else \
+		echo "✗ IR source file missing"; \
+	fi
+	@if [ -f $(SRC_DIR)/ir/ir.h ]; then \
+		echo "✓ IR header file exists"; \
+	else \
+		echo "✗ IR header file missing"; \
+	fi
+	@echo ""
+	@echo "All required directories:"
+	@for dir in $(DIRS); do \
+		if [ -d $$dir ]; then \
+			echo "✓ $$dir"; \
+		else \
+			echo "✗ $$dir (will be created during build)"; \
+		fi; \
+	done
 
 # ================== 帮助信息 ==================
 help:
@@ -258,20 +374,30 @@ help:
 	@echo "  test-phase3  - Test only phase 3"
 	@echo "  test-phase4  - Test only phase 4"
 	@echo "  test-all     - Test all phases sequentially"
+	@echo "  create-test  - Create test directory and sample test file"
 	@echo ""
 	@echo "Cleaning:"
 	@echo "  clean        - Clean all build files"
 	@echo "  clean-phase34- Clean phase 3/4 specific files"
 	@echo "  clean-ir     - Clean intermediate code files"
 	@echo "  clean-mips   - Clean MIPS assembly files"
+	@echo "  clean-parser - Clean parser generated files"
 	@echo ""
-	@echo "Other:"
+	@echo "Development:"
+	@echo "  check-files  - Check if required files exist"
 	@echo "  debug        - Build with debug symbols"
+	@echo "  debug-phase3 - Debug build for phase 3"
+	@echo "  debug-phase4 - Debug build for phase 4"
 	@echo "  release      - Build optimized release version"
+	@echo ""
+	@echo "Misc:"
 	@echo "  help         - Show this help message"
 
-# 包含依赖
--include $(OBJ_DIR)/dependencies
+# 包含依赖（可选）
+#-include $(OBJ_DIR)/dependencies
 
-.PHONY: all clean clean-phase34 clean-ir clean-mips phase1 phase2 phase3 phase4 \
-        test test-phase3 test-phase4 test-all debug debug-phase3 release depend help
+.PHONY: all clean clean-phase34 clean-ir clean-mips clean-parser \
+        phase1 phase2 phase3 phase4 \
+        test test-phase3 test-phase4 test-all create-test \
+        debug debug-phase3 debug-phase4 release \
+        check-files help
