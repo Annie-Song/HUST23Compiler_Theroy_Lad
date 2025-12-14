@@ -26,45 +26,88 @@ main:
   sw $fp, 60($sp)
   sw $ra, 56($sp)
   move $fp, $sp
-  li $t0, 5
+  li $t0, 10
   sw $t0, -4($fp)
   lw $t0, -4($fp)
   sw $t0, -8($fp)
-  li $t1, 10
+  li $t1, 20
   sw $t1, -12($fp)
   lw $t1, -12($fp)
   sw $t1, -16($fp)
-  lw $t2, -4($fp)
+  li $t2, 0
   sw $t2, -20($fp)
-  lw $t3, -4($fp)
-  sw $t3, -24($fp)
-  lw $t4, -20($fp)
-  lw $t5, -24($fp)
-  addu $t6, $t4, $t5
-  sw $t6, -28($fp)
-  lw $t7, -4($fp)
-  sw $t7, -32($fp)
-  li $s0, 10
-  sw $s0, -36($fp)
-  lw $s0, -32($fp)
-  lw $s1, -36($fp)
-  slt $s2, $s1, $s0
-  bnez $s2, L1
+  lw $t2, -20($fp)
+  sw $t2, -24($fp)
+  lw $t3, -28($fp)
+  sw $t3, -32($fp)
+  lw $t4, -36($fp)
+  sw $t4, -40($fp)
+  lw $t5, -32($fp)
+  lw $t6, -40($fp)
+  slt $t7, $t5, $t6
+  bnez $t7, L1
   j L2
 L1:
-  lw $s2, -4($fp)
-  sw $s2, -40($fp)
-  lw $s3, -40($fp)
-  sw $s3, -44($fp)
-  li $s4, 5
-  sw $s4, -48($fp)
-  lw $s4, -48($fp)
-  subu $s5, $s3, $s4
+  li $t7, 1
+  sw $t7, -44($fp)
+  lw $t7, -44($fp)
+  sw $t7, -48($fp)
+  j L3
 L2:
-  lw $s6, -4($fp)
-  sw $s6, -52($fp)
-  lw $s7, -52($fp)
-  move $v0, $s7
+  li $s0, 2
+  sw $s0, -52($fp)
+  lw $s0, -52($fp)
+  sw $s0, -56($fp)
+L3:
+  li $s1, 0
+  sw $s1, -60($fp)
+  lw $s1, -60($fp)
+  sw $s1, -64($fp)
+L4:
+  lw $s2, -68($fp)
+  sw $s2, -72($fp)
+  li $s3, 10
+  sw $s3, -76($fp)
+  lw $s3, -72($fp)
+  lw $s4, -76($fp)
+  slt $s5, $s3, $s4
+  bnez $s5, L5
+  j L6
+L5:
+  lw $s5, -80($fp)
+  sw $s5, -84($fp)
+  lw $s6, -84($fp)
+  sw $s6, -88($fp)
+  li $s7, 1
+  sw $s7, -92($fp)
+  lw $s7, -92($fp)
+  addu $t8, $s6, $s7
+  j L4
+L6:
+  li $t9, 0
+  sw $t9, -96($fp)
+  lw $t9, -96($fp)
+  sw $t9, -100($fp)
+  j L7
+L7:
+L8:
+L9:
+  j L7
+L10:
+  j L11
+L11:
+L12:
+  j L16
+L15:
+  j L14
+L16:
+  j L18
+L17:
+  j L13
+L18:
+L13:
+  j L11
+L14:
   move $sp, $fp
   lw $ra, 56($sp)
   lw $fp, 60($sp)

@@ -358,16 +358,22 @@ void gen_return(MipsContext *ctx, IRCode *code) {
 void gen_assign(MipsContext *ctx, IRCode *code) {
     if (!code->op1 || !code->result) return;
     
-    // 处理源操作数
-    MipsRegister src_reg = get_operand_register(ctx, code->op1);
+     MipsRegister src_reg = get_operand_register(ctx, code->op1);
     if (src_reg == MIPS_NO_REG) {
         src_reg = allocate_register(ctx, code->op1);
         if (src_reg == MIPS_NO_REG) return;
         
         if (code->op1->kind == OP_CONST) {
             emit(ctx, "  li %s, %d", reg_to_string(src_reg), code->op1->int_val);
-        } else if (code->op1->kind == OP_VAR) {
-            int offset = code->op1->offset ? code->op1->offset : -4;
+        } else if (code->op1->kind == OP_VAR || code->op1->kind == OP_TEMP) {
+            // 修复：处理变量和临时变量
+            int offset = code->op1->offset;
+            // 如果偏移量为0，需要分配一个新的偏移量
+            if (offset == 0 && ctx->in_function) {
+                offset = ctx->next_offset;
+                ctx->next_offset -= 4;
+                code->op1->offset = offset;
+            }
             emit(ctx, "  lw %s, %d($fp)", reg_to_string(src_reg), offset);
         }
     }

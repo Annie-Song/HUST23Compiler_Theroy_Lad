@@ -1913,6 +1913,9 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     
     if (!body) return;
     
+    printf("[IR DEBUG] FOR_STMT: init=%p, cond=%p, update=%p, body=%p\n", 
+           (void*)init, (void*)cond, (void*)update, (void*)body);
+    
     // 生成标签
     Operand *test_label_op = new_label_operand();
     Operand *body_label_op = new_label_operand();
@@ -1929,7 +1932,7 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     char *update_label = update_label_op->name;
     char *end_label = end_label_op->name;
     
-    printf("[IR DEBUG] FOR_STMT: test_label=%s, body_label=%s, update_label=%s, end_label=%s\n", 
+    printf("[IR DEBUG] FOR_STMT labels: test=%s, body=%s, update=%s, end=%s\n", 
            test_label, body_label, update_label, end_label);
     
     // ========== 进入循环上下文 ==========
@@ -1939,9 +1942,16 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     // 生成初始化代码
     if (init) {
         printf("[IR DEBUG] Generating for loop initialization\n");
+        // 初始化应该作为一个语句处理
         gen_ir_stmt(init, ir_list, NULL, symtab);
     } else {
         printf("[IR DEBUG] No initialization in for loop\n");
+    }
+    
+    // 跳转到测试标签
+    IRCode *goto_test = new_ir_code(IR_GOTO, NULL, NULL, test_label_op);
+    if (goto_test) {
+        append_ir_code(ir_list, goto_test);
     }
     
     // 测试标签
@@ -1958,27 +1968,31 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
         
         Operand *cond_temp = new_temp_operand(cond_type);
         if (cond_temp) {
+            // 生成条件表达式代码
             gen_ir_expr(cond, ir_list, cond_temp, symtab);
             
-            // 条件跳转到循环体
-            IRCode *if_code = new_ir_code(IR_IF, cond_temp, NULL, body_label_op);
-            if (if_code) {
-                append_ir_code(ir_list, if_code);
+            // 如果条件为假，跳转到结束
+            // 注意：我们需要检查条件是否为0（假）
+            Operand *zero = new_const_operand_int(0);
+            Operand *cond_check = new_temp_operand(new_basic_type(TYPE_INT));
+            
+            if (cond_check) {
+                // 比较：cond_check = (cond_temp == 0)
+                IRCode *eq_code = new_ir_code(IR_EQ, cond_temp, zero, cond_check);
+                if (eq_code) {
+                    append_ir_code(ir_list, eq_code);
+                }
+                
+                // 如果条件为假（cond_temp == 0），跳转到结束
+                IRCode *if_false = new_ir_code(IR_IF, cond_check, NULL, end_label_op);
+                if (if_false) {
+                    append_ir_code(ir_list, if_false);
+                }
             }
         }
     } else {
-        // 没有条件，直接跳转到循环体
-        printf("[IR DEBUG] No condition in for loop, jumping directly to body\n");
-        IRCode *goto_body = new_ir_code(IR_GOTO, NULL, NULL, body_label_op);
-        if (goto_body) {
-            append_ir_code(ir_list, goto_body);
-        }
-    }
-    
-    // 跳转到结束
-    IRCode *goto_end = new_ir_code(IR_GOTO, NULL, NULL, end_label_op);
-    if (goto_end) {
-        append_ir_code(ir_list, goto_end);
+        // 没有条件，无限循环
+        printf("[IR DEBUG] No condition in for loop, infinite loop\n");
     }
     
     // 循环体标签
@@ -1988,6 +2002,7 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     }
     
     // 生成循环体
+    printf("[IR DEBUG] Generating for loop body\n");
     gen_ir_stmt(body, ir_list, NULL, symtab);
     
     // 更新标签
@@ -2013,9 +2028,9 @@ static void gen_ir_for_stmt(ASTNode *node, IRList *ir_list, char *next_label, Sy
     }
     
     // 跳回测试
-    IRCode *goto_test = new_ir_code(IR_GOTO, NULL, NULL, test_label_op);
-    if (goto_test) {
-        append_ir_code(ir_list, goto_test);
+    IRCode *goto_test_again = new_ir_code(IR_GOTO, NULL, NULL, test_label_op);
+    if (goto_test_again) {
+        append_ir_code(ir_list, goto_test_again);
     }
     
     // 结束标签
