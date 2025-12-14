@@ -73,6 +73,7 @@ void print_mips_code(MipsCodeList *list);
 void save_mips_to_file(MipsCodeList *list, const char *filename);
 
 /* ================== 寄存器管理 ================== */
+void free_all_temp_registers(MipsContext *ctx);
 void init_registers(MipsContext *ctx);
 MipsRegister allocate_register(MipsContext *ctx, Operand *op);
 MipsRegister get_operand_register(MipsContext *ctx, Operand *op);

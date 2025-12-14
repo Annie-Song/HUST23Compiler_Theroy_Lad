@@ -87,6 +87,7 @@ static void gen_ir_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_array_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_compound_stmt(ASTNode *node, IRList *ir_list, SymbolTable *symtab);
 static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_list, SymbolTable *symtab);
+static void ensure_symbol_offsets(SymbolTable *symtab);
 
 /* ================== 操作数创建函数 ================== */
 
@@ -118,10 +119,32 @@ Operand *new_var_operand(SymbolEntry *sym) {
     Operand *op = (Operand *)malloc(sizeof(Operand));
     if (!op) return NULL;
     
+    // 清空内存
+    memset(op, 0, sizeof(Operand));
+    
     op->kind = OP_VAR;
-    op->name = strdup(sym->alias);
-    op->type = copy_type(sym->type);
+    
+    // 设置变量名
+    if (sym->alias) {
+        op->name = strdup(sym->alias);
+    } else if (sym->name) {
+        op->name = strdup(sym->name);
+    } else {
+        op->name = strdup("unnamed_var");
+    }
+    
+    // 复制类型
+    if (sym->type) {
+        op->type = copy_type(sym->type);
+    } else {
+        op->type = new_basic_type(TYPE_INT);
+    }
+    
+    // 关键：设置偏移量
     op->offset = sym->offset;
+    
+    printf("[IR DEBUG] Created var operand %s with offset=%d\n", op->name, op->offset);
+    
     return op;
 }
 
@@ -636,21 +659,13 @@ IRList *gen_ir_from_ast(ASTNode *node, SymbolTable *symtab) {
     IRList *ir_list = new_ir_list();
     if (!ir_list) return NULL;
     
-    // 修复：优先使用全局符号表
-    SymbolTable *table_to_use = NULL;
-    
+    // 确保符号表有正确的偏移量
     if (symtab) {
-        table_to_use = symtab;  // 如果传入了符号表，使用它
-    } else if (symbol_table) {
-        table_to_use = symbol_table;  // 否则使用全局符号表
-    } else {
-        printf("[ERROR] No symbol table available for IR generation\n");
-        free(ir_list);
-        return NULL;
+        ensure_symbol_offsets(symtab);
     }
     
     printf("[IR DEBUG] Using symbol table for IR generation\n");
-    gen_ir_program(node, ir_list, table_to_use);
+    gen_ir_program(node, ir_list, symtab);
     return ir_list;
 }
 
@@ -949,67 +964,45 @@ static void gen_ir_init_dec(ASTNode *node, IRList *ir_list, SymbolTable *symtab)
     
     if (!var_node || !init_expr) return;
     
-    // ========== 修复：正确处理函数调用的类型 ==========
-    Type *init_type = NULL;
-    
-    if (init_expr->kind == FUNC_CALL) {
-        printf("[IR DEBUG] INIT_DEC: init_expr is FUNC_CALL, special handling\n");
-        
-        // 对于函数调用，我们需要获取函数的返回类型
-        // 首先尝试从type_info获取
-        if (init_expr->type_info) {
-            printf("[IR DEBUG] FUNC_CALL has type_info kind=%d\n", init_expr->type_info->kind);
-            
-            // 如果type_info是函数类型，提取返回类型
-            if (init_expr->type_info->kind == TK_FUNCTION) {
-                if (init_expr->type_info->func.return_type) {
-                    printf("[IR DEBUG] Extracting return type from function type\n");
-                    init_type = copy_type(init_expr->type_info->func.return_type);
-                } else {
-                    printf("[IR DEBUG] No return type in function type, using int\n");
-                    init_type = new_basic_type(TYPE_INT);
-                }
-            }
-            // 如果type_info是数组类型，但表达式是函数调用，这是错误情况
-            else if (init_expr->type_info->kind == TK_ARRAY) {
-                printf("[IR DEBUG] ERROR: Function call has ARRAY type! Using int instead.\n");
-                init_type = new_basic_type(TYPE_INT);
-            }
-            // 其他情况（BASIC类型），直接使用
-            else {
-                init_type = copy_type(init_expr->type_info);
-            }
-        } else {
-            printf("[IR DEBUG] FUNC_CALL has no type_info, using int\n");
-            init_type = new_basic_type(TYPE_INT);
-        }
-    } else {
-        // 非函数调用表达式，正常处理
-        init_type = init_expr->type_info ? copy_type(init_expr->type_info) : new_basic_type(TYPE_INT);
+    // 获取变量符号
+    SymbolEntry *var_sym = NULL;
+    if (var_node->symbol_ref) {
+        var_sym = var_node->symbol_ref;
+        printf("[IR DEBUG] INIT_DEC: var %s has symbol_ref, offset=%d\n", 
+               var_node->type_id, var_sym->offset);
+    } else if (symtab) {
+        var_sym = lookup_symbol(symtab, var_node->type_id);
     }
     
-    // 确保init_type不为NULL
-    if (!init_type) {
-        printf("[IR DEBUG] WARNING: init_type is NULL, using int\n");
-        init_type = new_basic_type(TYPE_INT);
-    }
-    
-    printf("[IR DEBUG] Final init_type: kind=%d\n", init_type->kind);
+    // 为初始化表达式生成临时变量
+    Type *init_type = init_expr->type_info;
+    if (!init_type) init_type = new_basic_type(TYPE_INT);
     
     Operand *init_temp = new_temp_operand(init_type);
     if (!init_temp) return;
     
+    // 生成初始化表达式的IR代码
     gen_ir_expr(init_expr, ir_list, init_temp, symtab);
     
     // 如果是变量定义，将初始化值赋给变量
-    if (var_node->kind == ID_NODE && var_node->symbol_ref) {
-        Operand *var_op = new_var_operand(var_node->symbol_ref);
+    if (var_sym) {
+        // 创建变量操作数，确保有正确的偏移量
+        Operand *var_op = new_var_operand(var_sym);
         if (var_op) {
+            // 如果new_var_operand没有设置偏移量，手动设置
+            if (var_op->offset == 0 && var_sym->offset != 0) {
+                var_op->offset = var_sym->offset;
+                printf("[IR DEBUG] Set offset for var %s to %d in INIT_DEC\n", 
+                       var_op->name, var_op->offset);
+            }
+            
             IRCode *assign_code = new_ir_code(IR_ASSIGN, init_temp, NULL, var_op);
             if (assign_code) {
                 append_ir_code(ir_list, assign_code);
             }
         }
+    } else {
+        printf("[IR WARNING] No symbol found for variable %s\n", var_node->type_id);
     }
 }
 
@@ -1018,57 +1011,55 @@ static void gen_ir_expr(ASTNode *node, IRList *ir_list, Operand *result, SymbolT
     if (!node || !ir_list || !result) return;
     
     printf("[IR DEBUG] gen_ir_expr for node kind=%d\n", node->kind);
-    
+
     switch (node->kind) {
         case ID_NODE:
-            printf("[IR DEBUG] Processing identifier: %s\n", node->type_id);
-            printf("[IR DEBUG] Node has type_info: %s\n", node->type_info ? "YES" : "NO");
-            if (node->type_info) {
-                printf("[IR DEBUG] type_info kind=%d\n", node->type_info->kind);
-                if (node->type_info->kind == TK_ARRAY) {
-                    printf("[IR DEBUG] WARNING: identifier %s has array type!\n", node->type_id);
-                }
-            }
-            printf("[IR DEBUG] Node has symbol_ref: %s\n", node->symbol_ref ? "YES" : "NO");
-            
-            Operand *src_op = NULL;
-            
-            // 如果已有 symbol_ref，使用它
-            if (node->symbol_ref) {
-                printf("[IR DEBUG] Using existing symbol_ref\n");
-                src_op = new_var_operand(node->symbol_ref);
-            } else {
-                // 如果 symbol_ref 为 NULL，创建临时操作数
-                printf("[IR DEBUG] Symbol ref is NULL for %s, creating var operand\n", node->type_id);
+            {
+                printf("[IR DEBUG] Processing identifier: %s\n", node->type_id);
                 
-                // 创建一个临时的变量操作数
-                src_op = (Operand *)malloc(sizeof(Operand));
-                if (src_op) {
-                    src_op->kind = OP_VAR;
-                    src_op->name = strdup(node->type_id);
-                    // 使用节点的类型信息，如果没有则用int
-                    if (node->type_info) {
-                        src_op->type = copy_type(node->type_info);
+                // 首先尝试获取符号表条目
+                SymbolEntry *sym = NULL;
+                if (node->symbol_ref) {
+                    sym = node->symbol_ref;
+                    printf("[IR DEBUG] Using node->symbol_ref for %s, offset=%d\n", 
+                           node->type_id, sym->offset);
+                } else if (symtab) {
+                    sym = lookup_symbol(symtab, node->type_id);
+                    if (sym) {
+                        printf("[IR DEBUG] Found symbol in table for %s, offset=%d\n", 
+                               node->type_id, sym->offset);
                     } else {
-                        src_op->type = new_basic_type(TYPE_INT);
+                        printf("[IR DEBUG] Symbol not found in table for %s\n", node->type_id);
                     }
-                    src_op->offset = 0;
                 }
-            }
-            
-            if (src_op) {
-                IRCode *assign_code = new_ir_code(IR_ASSIGN, src_op, NULL, result);
-                if (assign_code) {
-                    append_ir_code(ir_list, assign_code);
-                }
-            } else {
-                printf("[ERROR] Failed to create operand for identifier: %s\n", node->type_id);
-                // 如果连操作数都创建失败，使用常量0
-                Operand *const_op = new_const_operand_int(0);
-                if (const_op) {
-                    IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
-                    if (assign_code) {
-                        append_ir_code(ir_list, assign_code);
+                
+                if (sym) {
+                    // 创建变量操作数
+                    Operand *var_op = new_var_operand(sym);
+                    if (var_op) {
+                        // 确保操作数有正确的偏移量
+                        if (var_op->offset == 0 && sym->offset != 0) {
+                            var_op->offset = sym->offset;
+                            printf("[IR DEBUG] Corrected offset for %s to %d\n", 
+                                   node->type_id, var_op->offset);
+                        }
+                        
+                        IRCode *assign_code = new_ir_code(IR_ASSIGN, var_op, NULL, result);
+                        if (assign_code) {
+                            append_ir_code(ir_list, assign_code);
+                        }
+                    } else {
+                        printf("[ERROR] Failed to create var operand for %s\n", node->type_id);
+                    }
+                } else {
+                    printf("[IR WARNING] No symbol found for %s, using default\n", node->type_id);
+                    // 使用默认值0
+                    Operand *const_op = new_const_operand_int(0);
+                    if (const_op) {
+                        IRCode *assign_code = new_ir_code(IR_ASSIGN, const_op, NULL, result);
+                        if (assign_code) {
+                            append_ir_code(ir_list, assign_code);
+                        }
                     }
                 }
             }
@@ -2413,6 +2404,13 @@ static void gen_ir_array_store(ASTNode *array_node, Operand *value, IRList *ir_l
     } else {
         printf("[ERROR] Not an array access node for array store\n");
     }
+}
+
+/* 确保符号表条目有正确的偏移量 */
+static void ensure_symbol_offsets(SymbolTable *symtab) {
+    if (!symtab) return;
+    
+    printf("[IR DEBUG] Ensuring symbol offsets\n");
 }
 
 /* 生成复合语句的中间代码 */
